@@ -1,12 +1,13 @@
 -- =====================================================================
--- BYPASS Ex_Weaponeffects + Weapon Skin Unlocker (PROP ATTACH v3)
--- /skin [ชื่อ] = ใส่สกิน | /skin off = ถอด | /skinlist = ดูรายชื่อ
+-- BYPASS Ex_Weaponeffects + Weapon Skin Unlocker (PROP ATTACH v3.2)
+-- [BOTTLE & POOLCUE ONLY - รองรับเฉพาะขวดและไม้พูล 100%]
+-- /home [ชื่อ] = ใส่สกิน | /homeoff = ถอดสกิน | /homelist = ดูรายชื่อ
 -- วิธี: สร้าง 3D Object ของสกิน Attach ไปที่มือ + ซ่อนอาวุธเดิม
+-- รองรับการใส่สกินข้ามสายระหว่าง Bottle และ Poolcue
 -- =====================================================================
 
-print("^2[SKIN] >>> โหลดสำเร็จ! /skinlist ดูสกิน | /skin [ชื่อ] ใส่สกิน ^7")
 pcall(function()
-    TriggerEvent('chat:addMessage', { args = { "^2[SKIN]", "^2โหลดสำเร็จ! /skinlist ดูสกิน | /skin [ชื่อ] ใส่ | /skin off ถอด^0" } })
+    TriggerEvent('chat:addMessage', { args = { "^2[HOME]", "^2โหลดสำเร็จ! /homelist ดูสกิน | /home [ชื่อ] ใส่ | /homeoff ถอด^0" } })
 end)
 
 local active = false
@@ -18,23 +19,36 @@ local damageHandlerRegistered = false
 local lastEffectTime = 0
 local lastHiddenWeaponEntity = nil
 
+-- ========== ATTACH CONFIG (แยกตำแหน่ง Poolcue และ Bottle ให้ตรงกระดูก) ==========
 local ATTACH_CONFIG = {
-    Bone = 28422,
-    Pos = { x = 0.055, y = 0.045, z = 0.01 },
-    Rot = { x = -77.0, y = -23.0, z = -16.0 },
-    RotOrder = 0
+    poolcue = {
+        Bone = 28422,
+        Pos = { x = 0.055, y = 0.045, z = 0.01 },
+        Rot = { x = -77.0, y = -23.0, z = -16.0 },
+        RotOrder = 0
+    },
+    bottle = {
+        Bone = 28422,
+        Pos = { x = 0.04, y = 0.025, z = 0.0 },
+        Rot = { x = -90.0, y = 0.0, z = 0.0 },
+        RotOrder = 0
+    }
 }
 
--- ========== WEAPON TYPE DETECTION ==========
+-- ========== WEAPON TYPE DETECTION (เฉพาะ POOLCUE และ BOTTLE เท่านั้น) ==========
 local ALL_WEAPON_NAMES = {
+    -- หมวด POOLCUE (ไม้พูลทุกแบบในเซิร์ฟเวอร์)
     'WEAPON_POOLCUE', 'WEAPON_POOLCUE0', 'WEAPON_POOLCUE1', 'WEAPON_POOLCUE2',
     'WEAPON_POOLCUE3', 'WEAPON_POOLCUE4', 'WEAPON_POOLCUE5', 'WEAPON_POOLCUE6',
     'WEAPON_POOLCUE7', 'WEAPON_POOLCUE8', 'WEAPON_POOLCUE9', 'WEAPON_POOLCUE10',
-    'WEAPON_POOLCUE14DAY', 'WEAPON_POOLCUE_14DAY', 'WEAPON_POOL14DAY', 'WEAPON_POOLCUEWAR', 'WEAPON_POOLCUE_WAR',
+    'WEAPON_POOLCUE_14D', 'WEAPON_POOLCUE14DAY', 'WEAPON_POOLCUE_14DAY', 'WEAPON_POOL14DAY',
+    'WEAPON_POOLCUE_WELFARE', 'WEAPON_POOLCUEWAR', 'WEAPON_POOLCUE_WAR',
+
+    -- หมวด BOTTLE (ขวดทุกแบบในเซิร์ฟเวอร์)
     'WEAPON_BOTTLE', 'WEAPON_BOTTLE0', 'WEAPON_BOTTLE1', 'WEAPON_BOTTLE2',
     'WEAPON_BOTTLE3', 'WEAPON_BOTTLE4', 'WEAPON_BOTTLE5', 'WEAPON_BOTTLE6',
     'WEAPON_BOTTLE7', 'WEAPON_BOTTLE8', 'WEAPON_BOTTLE9',
-    'WEAPON_KNIFE', 'WEAPON_DAGGER', 'WEAPON_SWITCHBLADE',
+    'WEAPON_BOTTLE_WELFARE',
 }
 
 local WEAPON_TYPE_MAP = {
@@ -42,12 +56,15 @@ local WEAPON_TYPE_MAP = {
     WEAPON_POOLCUE2='poolcue', WEAPON_POOLCUE3='poolcue', WEAPON_POOLCUE4='poolcue',
     WEAPON_POOLCUE5='poolcue', WEAPON_POOLCUE6='poolcue', WEAPON_POOLCUE7='poolcue',
     WEAPON_POOLCUE8='poolcue', WEAPON_POOLCUE9='poolcue', WEAPON_POOLCUE10='poolcue',
-    WEAPON_POOLCUE14DAY='poolcue', WEAPON_POOLCUE_14DAY='poolcue', WEAPON_POOL14DAY='poolcue', WEAPON_POOLCUEWAR='poolcue', WEAPON_POOLCUE_WAR='poolcue',
+    WEAPON_POOLCUE_14D='poolcue', WEAPON_POOLCUE14DAY='poolcue', WEAPON_POOLCUE_14DAY='poolcue',
+    WEAPON_POOL14DAY='poolcue', WEAPON_POOLCUE_WELFARE='poolcue',
+    WEAPON_POOLCUEWAR='poolcue', WEAPON_POOLCUE_WAR='poolcue',
+
     WEAPON_BOTTLE='bottle', WEAPON_BOTTLE0='bottle', WEAPON_BOTTLE1='bottle',
     WEAPON_BOTTLE2='bottle', WEAPON_BOTTLE3='bottle', WEAPON_BOTTLE4='bottle',
     WEAPON_BOTTLE5='bottle', WEAPON_BOTTLE6='bottle', WEAPON_BOTTLE7='bottle',
     WEAPON_BOTTLE8='bottle', WEAPON_BOTTLE9='bottle',
-    WEAPON_KNIFE='bottle', WEAPON_DAGGER='bottle', WEAPON_SWITCHBLADE='bottle',
+    WEAPON_BOTTLE_WELFARE='bottle',
 }
 
 local hashToType = {}
@@ -64,6 +81,7 @@ local function GetWeaponType(wHash)
     if wHash == GetHashKey('WEAPON_UNARMED') then return nil end
     local t = hashToType[wHash]
     if t then return t end
+
     for _, name in ipairs(ALL_WEAPON_NAMES) do
         local h = GetHashKey(name)
         if wHash == h or (wHash < 0 and wHash + 0x100000000 == h) or (wHash > 0 and wHash - 0x100000000 == h) then
@@ -71,40 +89,40 @@ local function GetWeaponType(wHash)
             return WEAPON_TYPE_MAP[name]
         end
     end
+
     local ped = PlayerPedId()
-    local group = GetWeapontypeGroup(wHash)
-    if group == GetHashKey('GROUP_MELEE') then
-        local we = GetCurrentPedWeaponEntityIndex(ped)
-        if we and we ~= 0 and DoesEntityExist(we) then
-            local model = GetEntityModel(we)
-            for _, name in ipairs(ALL_WEAPON_NAMES) do
-                if model == GetHashKey(name) then
-                    local wt = WEAPON_TYPE_MAP[name]
-                    hashToType[wHash] = wt
-                    return wt
-                end
+    local we = GetCurrentPedWeaponEntityIndex(ped)
+    if we and we ~= 0 and DoesEntityExist(we) then
+        local model = GetEntityModel(we)
+        for _, name in ipairs(ALL_WEAPON_NAMES) do
+            if model == GetHashKey(name) then
+                local wt = WEAPON_TYPE_MAP[name]
+                hashToType[wHash] = wt
+                return wt
             end
         end
-        hashToType[wHash] = 'poolcue'
-        return 'poolcue'
     end
+
     return nil
 end
 
 local function IsHoldingWeapon()
     local ped = PlayerPedId()
     local cur = GetSelectedPedWeapon(ped)
-    if cur == GetHashKey('WEAPON_UNARMED') then return false, nil end
+    if cur == GetHashKey('WEAPON_UNARMED') or cur == 0 then return false, nil end
     return true, cur
 end
 
--- ========== SKIN DATABASE ==========
+-- ========== SKIN DATABASE (สกินเซิร์ฟเวอร์ SYRUS ทั้งหมด) ==========
 local SKIN_DB = {
+    -- --- POOLCUE (ไม้พูล) ---
     bunny_pool    = { label="BUNNY",       weaponType="poolcue", skinModel="things_freebunny_poolcue",      component="COMPONENT_POOL_SKIN_01" },
     syrus_pool    = { label="SYRUS",       weaponType="poolcue", skinModel="w_me_poolsyrus",                component="COMPONENT_POOL_SKIN_02" },
     spark_pool    = { label="SPARK OVER",  weaponType="poolcue", skinModel="lazy_sparkover_poolcue",        component="COMPONENT_POOL_SKIN_03" },
     sleepy_pool   = { label="SLEEPY",      weaponType="poolcue", skinModel="bbg_wp26_poolcue",              component="COMPONENT_POOL_SKIN_04" },
     tiger_pool    = { label="WHITE TIGER", weaponType="poolcue", skinModel="sharkz_poolcue_white_tiger",    component="COMPONENT_POOL_SKIN_05" },
+
+    -- --- BOTTLE (ขวด/มีด) ---
     syrus_bottle  = { label="SYRUS",       weaponType="bottle",  skinModel="w_me_knife_syrus",              component="COMPONENT_BOTTLE_SKIN_01" },
     spark_bottle  = { label="SPARK OVER",  weaponType="bottle",  skinModel="lazy_sparkover_bottle",         component="COMPONENT_BOTTLE_SKIN_02" },
     sleepy_bottle = { label="SLEEPY",      weaponType="bottle",  skinModel="bbg_wp26_dagger",               component="COMPONENT_BOTTLE_SKIN_03" },
@@ -134,9 +152,10 @@ local function SafeDeleteProp()
     RestoreWeaponVisibility()
 end
 
-local function CreateSkinProp(ped, modelName)
+local function CreateSkinProp(ped, skinData)
     SafeDeleteProp()
 
+    local modelName = skinData.skinModel
     local modelHash = GetHashKey(modelName)
     if not IsModelInCdimage(modelHash) then return false end
 
@@ -153,7 +172,9 @@ local function CreateSkinProp(ped, modelName)
     pcall(SetEntityCompletelyDisableCollision, activePropEntity, false, true)
     pcall(DisableCamCollisionForObject, activePropEntity)
 
-    local att = ATTACH_CONFIG
+    local skinType = skinData.weaponType or 'poolcue'
+    local att = ATTACH_CONFIG[skinType] or ATTACH_CONFIG.poolcue
+
     local boneIndex = GetPedBoneIndex(ped, att.Bone)
     if boneIndex == -1 then boneIndex = GetPedBoneIndex(ped, 28422) end
 
@@ -193,15 +214,21 @@ end
 local function PlayHoldEffect(ped, skinData)
     local cfg = GetEffectConfig(skinData)
     if not cfg or not cfg.EffectCarry or not cfg.EffectCarry.Effect then return end
-    local we = GetCurrentPedWeaponEntityIndex(ped)
-    local useEnt = we ~= nil and we ~= 0 and DoesEntityExist(we)
+
+    local targetEnt = nil
+    if activePropEntity and DoesEntityExist(activePropEntity) then
+        targetEnt = activePropEntity
+    else
+        local we = GetCurrentPedWeaponEntityIndex(ped)
+        if we and we ~= 0 and DoesEntityExist(we) then targetEnt = we end
+    end
 
     for _, ef in ipairs(cfg.EffectCarry.Effect) do
         if ef.enabled ~= false and ef.Asset and ef.Name and EnsurePtfx(ef.Asset) then
             local p = ef.position or {}
             UseParticleFxAssetNextCall(ef.Asset)
-            if useEnt then
-                StartParticleFxNonLoopedOnEntity(ef.Name, we,
+            if targetEnt then
+                StartParticleFxNonLoopedOnEntity(ef.Name, targetEnt,
                     p.posx or 0.0, p.posy or 0.0, p.posz or 0.0,
                     p.rotx or 0.0, p.roty or 0.0, p.rotz or 0.0,
                     p.scale or 1.0, false, false, false)
@@ -224,7 +251,7 @@ local function StartHoldFxLoop(skinData)
             local ok, cur = IsHoldingWeapon()
             if ok then
                 local wt = GetWeaponType(cur)
-                if wt == skinData.weaponType or wt == nil then
+                if wt == 'poolcue' or wt == 'bottle' then
                     PlayHoldEffect(ped, skinData)
                 end
             end
@@ -236,7 +263,7 @@ local function StartHoldFxLoop(skinData)
     end)
 end
 
--- ========== HIT/KILL ==========
+-- ========== HIT/KILL EFFECT ==========
 local function PlayHitEffect(skinData, victimPed, isDead)
     local cfg = GetEffectConfig(skinData)
     if not cfg then return end
@@ -289,7 +316,7 @@ local function RegisterDamageHandler()
     end)
 end
 
--- ========== MAIN LOOP: Prop Attach + ซ่อนอาวุธเดิม ==========
+-- ========== MAIN LOOP: Prop Attach + ซ่อนอาวุธเดิม (0ms Seamless Loop) ==========
 CreateThread(function()
     Wait(2000)
     BuildHashCache()
@@ -304,15 +331,14 @@ CreateThread(function()
 
             if not isUnarmed then
                 local wt = GetWeaponType(curWeapon)
-                if wt == nil then wt = currentSkinData.weaponType end
-                if wt == currentSkinData.weaponType then
+                if wt == 'poolcue' or wt == 'bottle' then
                     local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
                     local hasWeaponEntity = wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity)
 
                     if hasWeaponEntity then
                         shouldHaveProp = true
                         if not activePropEntity or not DoesEntityExist(activePropEntity) then
-                            CreateSkinProp(ped, currentSkinData.skinModel)
+                            CreateSkinProp(ped, currentSkinData)
                         end
                         SetEntityVisible(wepEntity, false, false)
                         SetEntityAlpha(wepEntity, 0, false)
@@ -346,16 +372,15 @@ TriggerServerEvent = function(eventName, ...)
     return origTSE(eventName, ...)
 end
 
--- ========== HELPERS ==========
+-- ========== HELPERS (ไม่มี print) ==========
 local function SendMsg(t)
-    print("^3[SKIN]^7 " .. t)
-    pcall(function() TriggerEvent('chat:addMessage', { args = {"[SKIN]", t} }) end)
+    pcall(function() TriggerEvent('chat:addMessage', { args = {"[HOME]", t} }) end)
 end
 
--- ========== /skinlist ==========
-RegisterCommand('skinlist', function()
-    print("^2===================== [SKIN LIST] =====================^7")
-    print("^3--- POOLCUE (ไม้พูล) ---^7")
+-- ========== /homelist (จุดเดียวในสคริปต์ที่มี print ลง F8 Console) ==========
+RegisterCommand('homelist', function()
+    print("^2===================== [HOME SKIN LIST (BOTTLE & POOLCUE)] =====================^7")
+    print("^3--- 1. POOLCUE (ไม้พูล) ---^7")
     for key, data in pairs(SKIN_DB) do
         if data.weaponType == "poolcue" then
             local mk = (key == currentSkinKey) and " ^2<< EQUIPPED^7" or ""
@@ -369,10 +394,10 @@ RegisterCommand('skinlist', function()
                 if cfg.EffectImg and cfg.EffectImg.SoundName then p[#p+1]="SND" end
                 if #p>0 then fx=(" ^5[%s]^7"):format(table.concat(p,"+")) end
             end
-            print(("  ^6/skin %-15s^7 = %s%s%s"):format(key, data.label, fx, mk))
+            print(("  ^6/home %-15s^7 = %s%s%s"):format(key, data.label, fx, mk))
         end
     end
-    print("^3--- BOTTLE/KNIFE (ขวด/มีด) ---^7")
+    print("^3--- 2. BOTTLE (ขวด/มีด) ---^7")
     for key, data in pairs(SKIN_DB) do
         if data.weaponType == "bottle" then
             local mk = (key == currentSkinKey) and " ^2<< EQUIPPED^7" or ""
@@ -386,105 +411,107 @@ RegisterCommand('skinlist', function()
                 if cfg.EffectImg and cfg.EffectImg.SoundName then p[#p+1]="SND" end
                 if #p>0 then fx=(" ^5[%s]^7"):format(table.concat(p,"+")) end
             end
-            print(("  ^6/skin %-15s^7 = %s%s%s"):format(key, data.label, fx, mk))
+            print(("  ^6/home %-15s^7 = %s%s%s"):format(key, data.label, fx, mk))
         end
     end
     print("")
-    print("^3วิธีใช้:^7 ถืออาวุธแล้วพิมพ์ ^6/skin [ชื่อ]^7 เช่น ^6/skin syrus^7")
-    print("^3ถอด:^7 ^1/skin off^7 | ^3Debug:^7 ^6/skindebug^7")
-    print("^2========================================================^7")
-    SendMsg("^2รายชื่อสกินขึ้นใน F8 แล้ว^0")
+    print("^3คำสั่งย่อ:^7 /home syrus | /home spark | /home sleepy | /home tiger | /home bunny")
+    print("^3วิธีใช้:^7 ถือไม้พูลหรือขวด แล้วพิมพ์ ^6/home [ชื่อ]^7 (สามารถใส่สกินข้ามสายกันได้)")
+    print("^3ถอด:^7 ^1/homeoff^7")
+    print("^2=============================================================================^7")
+    SendMsg("^2รายชื่อสกินขึ้นใน F8 แล้ว (พิมพ์ /homelist ดูซ้ำได้)^0")
 end, false)
 
--- ========== /skindebug ==========
-RegisterCommand('skindebug', function()
+-- ========== ถอดสกิน ==========
+local function RemoveSkin()
+    holdFxToken = holdFxToken + 1
+    SafeDeleteProp()
+    currentSkinKey = nil
+    currentSkinData = nil
+    active = false
     local ped = PlayerPedId()
-    local cur = GetSelectedPedWeapon(ped)
     local we = GetCurrentPedWeaponEntityIndex(ped)
-    local wt = GetWeaponType(cur)
-
-    local group = GetWeapontypeGroup(cur)
-    print("^2========== [SKIN DEBUG] ==========^7")
-    print(("  ^3Weapon Hash:^7 %s (0x%X)"):format(cur, cur & 0xFFFFFFFF))
-    print(("  ^3Group Hash:^7 %s (0x%X)"):format(group, group & 0xFFFFFFFF))
-    print(("  ^3Type:^7 %s | WeaponEntity: %s"):format(tostring(wt or "UNKNOWN"), tostring(we)))
-    for _, name in ipairs(ALL_WEAPON_NAMES) do
-        local h = GetHashKey(name)
-        if cur == h or (cur < 0 and cur + 0x100000000 == h) or (cur > 0 and cur - 0x100000000 == h) then
-            print(("  ^2MATCHED:^7 %s"):format(name))
-        end
-    end
-    print(("  ^3Active:^7 %s | Skin: %s"):format(tostring(active), tostring(currentSkinKey or "none")))
-    print(("  ^3Prop:^7 %s | Exists: %s"):format(
-        tostring(activePropEntity),
-        tostring(activePropEntity and DoesEntityExist(activePropEntity) or false)
-    ))
-
-    if currentSkinData then
-        local modelHash = GetHashKey(currentSkinData.skinModel)
-        print(("  ^3skinModel:^7 %s"):format(currentSkinData.skinModel))
-        print(("  ^3modelHash:^7 %s | InCdimage: %s"):format(modelHash, tostring(IsModelInCdimage(modelHash))))
-    end
-
     if we and we ~= 0 and DoesEntityExist(we) then
-        print(("  ^3WeaponEntity visible:^7 %s | alpha: %s"):format(
-            tostring(IsEntityVisible(we)),
-            tostring(GetEntityAlpha(we))
-        ))
+        SetEntityVisible(we, true, false)
+        ResetEntityAlpha(we)
     end
+    SendMsg("^1[OFF]^0 ถอดสกินและเอฟเฟคทั้งหมดแล้ว")
+end
 
-    print("^2===================================^7")
-    SendMsg("^2Debug ขึ้น F8 แล้ว^0")
+-- ========== /homeoff ==========
+RegisterCommand('homeoff', function()
+    RemoveSkin()
 end, false)
 
--- ========== /skin ==========
-RegisterCommand('skin', function(_, args)
+-- ========== /home ==========
+RegisterCommand('home', function(_, args)
     local input = args[1]
     local ped = PlayerPedId()
 
-    if not input or input == '' then SendMsg("^3/skinlist ดูสกิน | /skin [ชื่อ] ใส่ | /skin off ถอด^0") return end
-    if input:lower() == 'list' then ExecuteCommand('skinlist') return end
-    if input:lower() == 'debug' then ExecuteCommand('skindebug') return end
+    if not input or input == '' then
+        SendMsg("^3/homelist ดูสกิน | /home [ชื่อ] ใส่ | /homeoff ถอด^0")
+        return
+    end
 
+    if input:lower() == 'list' then ExecuteCommand('homelist') return end
     if input:lower() == 'off' or input:lower() == 'clear' or input:lower() == 'default' then
-        holdFxToken = holdFxToken + 1
-        SafeDeleteProp()
-        currentSkinKey = nil
-        currentSkinData = nil
-        active = false
-        local we = GetCurrentPedWeaponEntityIndex(ped)
-        if we and we ~= 0 and DoesEntityExist(we) then
-            SetEntityVisible(we, true, false)
-            ResetEntityAlpha(we)
-        end
-        SendMsg("^1[OFF]^0 ถอดสกินและเอฟเฟคทั้งหมดแล้ว")
+        RemoveSkin()
         return
     end
 
     local ok, held = IsHoldingWeapon()
-    if not ok then SendMsg("^1[ERROR]^0 ถืออาวุธก่อนแล้วค่อยใส่สกิน!") return end
+    if not ok then
+        SendMsg("^1[ERROR]^0 ถืออาวุธก่อนแล้วค่อยใส่สกิน!")
+        return
+    end
 
     local wt = GetWeaponType(held)
+    if not wt or (wt ~= 'poolcue' and wt ~= 'bottle') then
+        SendMsg("^1[ERROR]^0 สคริปต์นี้รองรับเฉพาะ ^3ไม้พูล (Poolcue)^0 และ ^3ขวด (Bottle)^0 เท่านั้น!")
+        return
+    end
+
     local sl = input:lower()
     local fk, fd = nil, nil
 
-    if SKIN_DB[input] then fk, fd = input, SKIN_DB[input] end
-    if not fk then
-        for k, d in pairs(SKIN_DB) do
-            if k:lower() == sl then fk, fd = k, d break end
-        end
+    -- 1. ค้นหาแบบตรงตัวคีย์
+    if SKIN_DB[input] then
+        fk, fd = input, SKIN_DB[input]
     end
+
+    -- 2. ค้นหาแบบตัวพิมพ์เล็กตรงกัน
     if not fk then
-        local bk, bd = nil, nil
         for k, d in pairs(SKIN_DB) do
-            if k:lower():find(sl, 1, true) or d.label:lower():find(sl, 1, true) then
-                if wt and d.weaponType == wt then fk, fd = k, d break
-                elseif not bk then bk, bd = k, d end
+            if k:lower() == sl then
+                fk, fd = k, d
+                break
             end
         end
-        if not fk and bk then fk, fd = bk, bd end
     end
-    if not fk then SendMsg(("^1[NOT FOUND]^0 ไม่พบสกิน '%s' (/skinlist ดูรายชื่อ)"):format(input)) return end
+
+    -- 3. ค้นหาคำย่อ/ชื่อ Label โดยเน้นตรงกับประเภทอาวุธที่ถือก่อน
+    if not fk then
+        local backupKey, backupData = nil, nil
+        for k, d in pairs(SKIN_DB) do
+            if k:lower():find(sl, 1, true) or d.label:lower():find(sl, 1, true) then
+                if d.weaponType == wt then
+                    fk, fd = k, d
+                    break
+                elseif not backupKey then
+                    backupKey, backupData = k, d
+                end
+            end
+        end
+        -- ถ้าไม่พบตรงประเภทที่ถือ ให้อนุญาตใช้สกินข้ามสาย (Cross-skin) ได้ทันที
+        if not fk and backupKey then
+            fk, fd = backupKey, backupData
+        end
+    end
+
+    if not fk or not fd then
+        SendMsg(("^1[NOT FOUND]^0 ไม่พบสกิน '%s' (/homelist ดูรายชื่อ)"):format(input))
+        return
+    end
 
     holdFxToken = holdFxToken + 1
     SafeDeleteProp()
@@ -493,9 +520,16 @@ RegisterCommand('skin', function(_, args)
     currentSkinData = fd
     active = true
 
-    CreateSkinProp(ped, fd.skinModel)
+    CreateSkinProp(ped, fd)
     StartHoldFxLoop(fd)
     RegisterDamageHandler()
 
     SendMsg(("^2[OK]^0 สวมสกิน ^6%s^0 (%s) สำเร็จ!"):format(fd.label, fk))
 end, false)
+
+-- Cleanup เมื่อปิด Resource หรือออก
+AddEventHandler('onResourceStop', function(res)
+    if res == GetCurrentResourceName() then
+        SafeDeleteProp()
+    end
+end)
