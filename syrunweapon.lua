@@ -30,7 +30,7 @@ local ALL_WEAPON_NAMES = {
     'WEAPON_POOLCUE', 'WEAPON_POOLCUE0', 'WEAPON_POOLCUE1', 'WEAPON_POOLCUE2',
     'WEAPON_POOLCUE3', 'WEAPON_POOLCUE4', 'WEAPON_POOLCUE5', 'WEAPON_POOLCUE6',
     'WEAPON_POOLCUE7', 'WEAPON_POOLCUE8', 'WEAPON_POOLCUE9', 'WEAPON_POOLCUE10',
-    'WEAPON_POOLCUE14DAY', 'WEAPON_POOLCUEWAR',
+    'WEAPON_POOLCUE14DAY', 'WEAPON_POOLCUE_14DAY', 'WEAPON_POOL14DAY', 'WEAPON_POOLCUEWAR', 'WEAPON_POOLCUE_WAR',
     'WEAPON_BOTTLE', 'WEAPON_BOTTLE0', 'WEAPON_BOTTLE1', 'WEAPON_BOTTLE2',
     'WEAPON_BOTTLE3', 'WEAPON_BOTTLE4', 'WEAPON_BOTTLE5', 'WEAPON_BOTTLE6',
     'WEAPON_BOTTLE7', 'WEAPON_BOTTLE8', 'WEAPON_BOTTLE9',
@@ -42,7 +42,7 @@ local WEAPON_TYPE_MAP = {
     WEAPON_POOLCUE2='poolcue', WEAPON_POOLCUE3='poolcue', WEAPON_POOLCUE4='poolcue',
     WEAPON_POOLCUE5='poolcue', WEAPON_POOLCUE6='poolcue', WEAPON_POOLCUE7='poolcue',
     WEAPON_POOLCUE8='poolcue', WEAPON_POOLCUE9='poolcue', WEAPON_POOLCUE10='poolcue',
-    WEAPON_POOLCUE14DAY='poolcue', WEAPON_POOLCUEWAR='poolcue',
+    WEAPON_POOLCUE14DAY='poolcue', WEAPON_POOLCUE_14DAY='poolcue', WEAPON_POOL14DAY='poolcue', WEAPON_POOLCUEWAR='poolcue', WEAPON_POOLCUE_WAR='poolcue',
     WEAPON_BOTTLE='bottle', WEAPON_BOTTLE0='bottle', WEAPON_BOTTLE1='bottle',
     WEAPON_BOTTLE2='bottle', WEAPON_BOTTLE3='bottle', WEAPON_BOTTLE4='bottle',
     WEAPON_BOTTLE5='bottle', WEAPON_BOTTLE6='bottle', WEAPON_BOTTLE7='bottle',
@@ -66,10 +66,27 @@ local function GetWeaponType(wHash)
     if t then return t end
     for _, name in ipairs(ALL_WEAPON_NAMES) do
         local h = GetHashKey(name)
-        if (wHash < 0 and wHash + 0x100000000 == h) or (wHash > 0 and wHash - 0x100000000 == h) then
+        if wHash == h or (wHash < 0 and wHash + 0x100000000 == h) or (wHash > 0 and wHash - 0x100000000 == h) then
             hashToType[wHash] = WEAPON_TYPE_MAP[name]
             return WEAPON_TYPE_MAP[name]
         end
+    end
+    local ped = PlayerPedId()
+    local group = GetWeapontypeGroup(wHash)
+    if group == GetHashKey('GROUP_MELEE') then
+        local we = GetCurrentPedWeaponEntityIndex(ped)
+        if we and we ~= 0 and DoesEntityExist(we) then
+            local model = GetEntityModel(we)
+            for _, name in ipairs(ALL_WEAPON_NAMES) do
+                if model == GetHashKey(name) then
+                    local wt = WEAPON_TYPE_MAP[name]
+                    hashToType[wHash] = wt
+                    return wt
+                end
+            end
+        end
+        hashToType[wHash] = 'poolcue'
+        return 'poolcue'
     end
     return nil
 end
@@ -287,7 +304,8 @@ CreateThread(function()
 
             if not isUnarmed then
                 local wt = GetWeaponType(curWeapon)
-                if wt and wt == currentSkinData.weaponType then
+                if wt == nil then wt = currentSkinData.weaponType end
+                if wt == currentSkinData.weaponType then
                     local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
                     local hasWeaponEntity = wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity)
 
@@ -385,9 +403,17 @@ RegisterCommand('skindebug', function()
     local we = GetCurrentPedWeaponEntityIndex(ped)
     local wt = GetWeaponType(cur)
 
+    local group = GetWeapontypeGroup(cur)
     print("^2========== [SKIN DEBUG] ==========^7")
     print(("  ^3Weapon Hash:^7 %s (0x%X)"):format(cur, cur & 0xFFFFFFFF))
+    print(("  ^3Group Hash:^7 %s (0x%X)"):format(group, group & 0xFFFFFFFF))
     print(("  ^3Type:^7 %s | WeaponEntity: %s"):format(tostring(wt or "UNKNOWN"), tostring(we)))
+    for _, name in ipairs(ALL_WEAPON_NAMES) do
+        local h = GetHashKey(name)
+        if cur == h or (cur < 0 and cur + 0x100000000 == h) or (cur > 0 and cur - 0x100000000 == h) then
+            print(("  ^2MATCHED:^7 %s"):format(name))
+        end
+    end
     print(("  ^3Active:^7 %s | Skin: %s"):format(tostring(active), tostring(currentSkinKey or "none")))
     print(("  ^3Prop:^7 %s | Exists: %s"):format(
         tostring(activePropEntity),
