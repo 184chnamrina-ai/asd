@@ -76,7 +76,33 @@ reg('WEAPON_BAT', {
 
 local function getWeaponKey(wHash)
     if not wHash or wHash == 0 or wHash == GetHashKey('WEAPON_UNARMED') then return nil end
-    return WEAPON_VARIANTS[wHash]
+    local r = WEAPON_VARIANTS[wHash]
+    if r then return r end
+    -- FiveM hash อาจ signed/unsigned ต่างกัน
+    if wHash < 0 then
+        r = WEAPON_VARIANTS[wHash + 0x100000000]
+        if r then return r end
+    else
+        r = WEAPON_VARIANTS[wHash - 0x100000000]
+        if r then return r end
+    end
+    -- fallback: ลองเช็คจากชื่อ weapon ที่รู้จัก
+    local weaponGroups = {
+        { key='WEAPON_POOLCUE', patterns={'poolcue','pool_cue'} },
+        { key='WEAPON_KNIFE',   patterns={'knife'} },
+        { key='WEAPON_BOTTLE',  patterns={'bottle'} },
+        { key='WEAPON_DAGGER',  patterns={'dagger'} },
+        { key='WEAPON_MACHETE', patterns={'machete'} },
+        { key='WEAPON_KNUCKLE', patterns={'knuckle'} },
+        { key='WEAPON_REVOLVER',patterns={'revolver'} },
+        { key='WEAPON_BAT',     patterns={'bat'} },
+    }
+    for _, g in ipairs(weaponGroups) do
+        for _, p in ipairs(g.patterns) do
+            if wHash == GetHashKey('WEAPON_'..string.upper(p)) then return g.key end
+        end
+    end
+    return nil
 end
 
 -- ============================================================================
