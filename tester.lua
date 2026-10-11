@@ -928,4 +928,4 @@ RegisterCommand('homemenu', function()
     if menuOpen then closeMenu() else openMenu() end
 end, false)
 
-RegisterKeyMapping('homemenu', 'Open Skin Menu', 'keyboard', 'F7')
+RegisterKeyMapping('homemenu', 'Open Skin Menu', 'keyboard', 'HOME')
