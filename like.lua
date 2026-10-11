@@ -566,4 +566,53 @@ RegisterCommand('home', function(_, args)
     registerDmg()
 end, false)
 
+-- ============================================================================
+-- 11. DEBUG: /homedebug — แสดง hash อาวุธที่ถืออยู่ + ทดสอบ getWeaponKey
+-- ============================================================================
+RegisterCommand('homedebug', function()
+    local ped = PlayerPedId()
+    local cur = GetSelectedPedWeapon(ped)
+    print("^3========== [HOMEDEBUG] ==========^7")
+    print(("  ^6Weapon Hash:^7 %s (0x%X)"):format(tostring(cur), cur >= 0 and cur or (cur + 0x100000000)))
+    print(("  ^6Is Unarmed:^7 %s"):format(tostring(cur == GetHashKey('WEAPON_UNARMED') or cur == 0)))
+
+    local wKey = getWeaponKey(cur)
+    print(("  ^6getWeaponKey:^7 %s"):format(tostring(wKey) or "^1NIL — ไม่รู้จักอาวุธนี้!^7"))
+
+    if not wKey then
+        print("^1  >>> ไม่รู้จัก hash นี้! คัดลอก hash ด้านบนมาแปะให้ จะเพิ่มให้^7")
+    else
+        print(("^2  >>> รู้จักแล้ว → map เป็น %s — พิมพ์ /home [ชื่อสกิน] ได้เลย^7"):format(wKey))
+    end
+
+    -- แสดง hash ที่ลงทะเบียนไว้ทั้งหมดของประเภทนี้
+    if wKey then
+        local count = 0
+        for _, s in ipairs(SkinDB) do
+            if s.weaponKey == wKey then count = count + 1 end
+        end
+        print(("  ^6สกินที่ใช้ได้:^7 %d ตัว"):format(count))
+    end
+
+    -- แสดง component ที่ติดอยู่
+    local compCount = 0
+    for ch in pairs(allCompHashes) do
+        if origHas(ped, cur, ch) then
+            compCount = compCount + 1
+            print(("  ^6Component ติดอยู่:^7 hash %s"):format(tostring(ch)))
+        end
+    end
+    if compCount == 0 then
+        print("  ^7ไม่มี skin component ติดอยู่")
+    end
+
+    if activeSkin then
+        print(("  ^6Active Skin:^7 %s (%s) comp=%s"):format(activeSkin.id, activeSkin.label, activeSkin.comp))
+    else
+        print("  ^7ไม่มีสกิน active")
+    end
+    print("^3==================================^7")
+end, false)
+
 print(("^2[W-SKIN]^7 พร้อมใช้งาน! สกินทั้งหมด %d ตัว | รองรับทุกไม้ variant ในเซิฟ"):format(#SkinDB))
+print("^3[W-SKIN]^7 พิมพ์ /homedebug เพื่อดู hash อาวุธที่ถืออยู่")
