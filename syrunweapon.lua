@@ -1,10 +1,9 @@
 -- =====================================================================
--- BYPASS Ex_Weaponeffects + nc_inventory Weapon Skin Unlocker
+-- BYPASS Ex_Weaponeffects + Weapon Skin Unlocker
 -- /skin [ชื่อ] = ใส่สกิน | /skin off = ถอด | /skinlist = ดูรายชื่อ
--- /skindebug = debug อาวุธที่ถืออยู่
 -- =====================================================================
 
-print("^2[SKIN-BYPASS] >>> โหลดสำเร็จ! พิมพ์ /skinlist ดูสกินทั้งหมด | /skin [ชื่อ] ใส่สกิน ^7")
+print("^2[SKIN-BYPASS] >>> โหลดสำเร็จ! /skinlist ดูสกิน | /skin [ชื่อ] ใส่สกิน ^7")
 pcall(function()
     TriggerEvent('chat:addMessage', { args = { "^2[SKIN]", "^2โหลดสำเร็จ! /skinlist ดูสกิน | /skin [ชื่อ] ใส่สกิน | /skin off ถอด^0" } })
 end)
@@ -16,7 +15,7 @@ local autoEquipRunning = false
 local holdFxRunning = false
 local damageHandlerRegistered = false
 local lastEffectTime = 0
-local RES = "Ex_Weaponeffects"
+local currentPtfxHandles = {}
 
 -- ========== WEAPON TYPE DETECTION ==========
 local POOLCUE_NAMES = {
@@ -25,7 +24,6 @@ local POOLCUE_NAMES = {
     'WEAPON_POOLCUE6', 'WEAPON_POOLCUE7', 'WEAPON_POOLCUE8', 'WEAPON_POOLCUE9',
     'WEAPON_POOLCUE10', 'WEAPON_POOLCUE14DAY', 'WEAPON_POOLCUEWAR',
 }
-
 local BOTTLE_NAMES = {
     'WEAPON_BOTTLE', 'WEAPON_BOTTLE0', 'WEAPON_BOTTLE1', 'WEAPON_BOTTLE2',
     'WEAPON_BOTTLE3', 'WEAPON_BOTTLE4', 'WEAPON_BOTTLE5',
@@ -33,31 +31,11 @@ local BOTTLE_NAMES = {
     'WEAPON_KNIFE', 'WEAPON_DAGGER', 'WEAPON_SWITCHBLADE',
 }
 
-local KNUCKLE_NAMES = {
-    'WEAPON_KNUCKLEDUSTER', 'WEAPON_KNUCKLE', 'WEAPON_KNUCKLE0', 'WEAPON_KNUCKLE1',
-    'WEAPON_KNUCKLE2', 'WEAPON_KNUCKLE3',
-}
-
-local MACHETE_NAMES = {
-    'WEAPON_MACHETE', 'WEAPON_MACHETE0', 'WEAPON_MACHETE1', 'WEAPON_MACHETE2',
-    'WEAPON_MACHETE3',
-}
-
 local weaponHashCache = {}
 
 local function BuildHashCache()
-    for _, name in ipairs(POOLCUE_NAMES) do
-        weaponHashCache[GetHashKey(name)] = 'poolcue'
-    end
-    for _, name in ipairs(BOTTLE_NAMES) do
-        weaponHashCache[GetHashKey(name)] = 'bottle'
-    end
-    for _, name in ipairs(KNUCKLE_NAMES) do
-        weaponHashCache[GetHashKey(name)] = 'knuckle'
-    end
-    for _, name in ipairs(MACHETE_NAMES) do
-        weaponHashCache[GetHashKey(name)] = 'machete'
-    end
+    for _, name in ipairs(POOLCUE_NAMES) do weaponHashCache[GetHashKey(name)] = 'poolcue' end
+    for _, name in ipairs(BOTTLE_NAMES) do weaponHashCache[GetHashKey(name)] = 'bottle' end
 end
 
 local function GetWeaponType(wHash)
@@ -78,102 +56,48 @@ end
 local function IsHoldingWeapon()
     local ped = PlayerPedId()
     local curWeapon = GetSelectedPedWeapon(ped)
-    if curWeapon == GetHashKey('WEAPON_UNARMED') then return false, nil, nil end
+    if curWeapon == GetHashKey('WEAPON_UNARMED') then return false, nil end
     local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
-    if wpEntity ~= 0 and DoesEntityExist(wpEntity) then
-        return true, curWeapon, wpEntity
-    end
-    return curWeapon ~= 0, curWeapon, nil
+    if wpEntity ~= 0 and DoesEntityExist(wpEntity) then return true, curWeapon end
+    return curWeapon ~= 0, curWeapon
 end
 
 -- ========== SKIN DATABASE ==========
+-- skinModel = ชื่อ model ที่ใช้เป็น component hash (เหมือนตัวอย่าง 2)
+
 local SKIN_DB = {
     -- POOLCUE
-    bunny_pool = {
-        label = "BUNNY",
-        weaponType = "poolcue",
-        component = "COMPONENT_POOL_SKIN_01",
-        modelHash = "things_freebunny_poolcue",
-    },
-    syrus_pool = {
-        label = "SYRUS",
-        weaponType = "poolcue",
-        component = "COMPONENT_POOL_SKIN_02",
-        modelHash = "w_me_poolsyrus",
-    },
-    spark_pool = {
-        label = "SPARK OVER",
-        weaponType = "poolcue",
-        component = "COMPONENT_POOL_SKIN_03",
-        modelHash = "lazy_sparkover_poolcue",
-    },
-    sleepy_pool = {
-        label = "SLEEPY",
-        weaponType = "poolcue",
-        component = "COMPONENT_POOL_SKIN_04",
-        modelHash = "bbg_wp26_poolcue",
-    },
-    tiger_pool = {
-        label = "WHITE TIGER",
-        weaponType = "poolcue",
-        component = "COMPONENT_POOL_SKIN_05",
-        modelHash = "sharkz_poolcue_white_tiger",
-    },
-
+    bunny_pool    = { label = "BUNNY",       weaponType = "poolcue", skinModel = "things_freebunny_poolcue" },
+    syrus_pool    = { label = "SYRUS",       weaponType = "poolcue", skinModel = "w_me_poolsyrus" },
+    spark_pool    = { label = "SPARK OVER",  weaponType = "poolcue", skinModel = "lazy_sparkover_poolcue" },
+    sleepy_pool   = { label = "SLEEPY",      weaponType = "poolcue", skinModel = "bbg_wp26_poolcue" },
+    tiger_pool    = { label = "WHITE TIGER", weaponType = "poolcue", skinModel = "sharkz_poolcue_white_tiger" },
     -- BOTTLE / KNIFE
-    syrus_bottle = {
-        label = "SYRUS",
-        weaponType = "bottle",
-        component = "COMPONENT_BOTTLE_SKIN_01",
-        modelHash = "w_me_knife_syrus",
-    },
-    spark_bottle = {
-        label = "SPARK OVER",
-        weaponType = "bottle",
-        component = "COMPONENT_BOTTLE_SKIN_02",
-        modelHash = "lazy_sparkover_bottle",
-    },
-    sleepy_bottle = {
-        label = "SLEEPY",
-        weaponType = "bottle",
-        component = "COMPONENT_BOTTLE_SKIN_03",
-        modelHash = "bbg_wp26_dagger",
-    },
-    tiger_bottle = {
-        label = "WHITE TIGER",
-        weaponType = "bottle",
-        component = "COMPONENT_BOTTLE_SKIN_04",
-        modelHash = "sharkz_bottle_white_tiger",
-    },
+    syrus_bottle  = { label = "SYRUS",       weaponType = "bottle",  skinModel = "w_me_knife_syrus" },
+    spark_bottle  = { label = "SPARK OVER",  weaponType = "bottle",  skinModel = "lazy_sparkover_bottle" },
+    sleepy_bottle = { label = "SLEEPY",      weaponType = "bottle",  skinModel = "bbg_wp26_dagger" },
+    tiger_bottle  = { label = "WHITE TIGER", weaponType = "bottle",  skinModel = "sharkz_bottle_white_tiger" },
 }
 
--- ========== COMPONENT MANAGEMENT ==========
-local ALL_COMPONENTS = {}
+-- สร้าง list ของ skinModel ทั้งหมดเพื่อถอดออก
+local ALL_SKIN_MODELS = {}
 for _, data in pairs(SKIN_DB) do
-    ALL_COMPONENTS[#ALL_COMPONENTS + 1] = data.component
+    ALL_SKIN_MODELS[#ALL_SKIN_MODELS + 1] = data.skinModel
 end
 
-local function RemoveAllSkinComponents(ped, wHash)
-    for _, comp in ipairs(ALL_COMPONENTS) do
-        local compHash = GetHashKey(comp)
-        pcall(function()
-            if HasPedGotWeaponComponent(ped, wHash, compHash) then
-                RemoveWeaponComponentFromPed(ped, wHash, compHash)
-            end
-        end)
+-- ========== PTFX MANAGEMENT ==========
+local loadedPtfx = {}
+
+local function ClearAllPtfx()
+    for i = #currentPtfxHandles, 1, -1 do
+        local h = currentPtfxHandles[i]
+        if h and DoesParticleFxLoopedExist(h) then
+            StopParticleFxLooped(h, false)
+            RemoveParticleFx(h, false)
+        end
+        currentPtfxHandles[i] = nil
     end
 end
-
-local function ApplySkinComponent(ped, wHash, skinData)
-    if not skinData or not skinData.component then return false end
-    RemoveAllSkinComponents(ped, wHash)
-    local compHash = GetHashKey(skinData.component)
-    GiveWeaponComponentToPed(ped, wHash, compHash)
-    return true
-end
-
--- ========== PTFX HOLD EFFECT ==========
-local loadedPtfx = {}
 
 local function EnsurePtfx(asset)
     if not asset then return false end
@@ -188,18 +112,38 @@ local function EnsurePtfx(asset)
     return false
 end
 
+-- ========== COMPONENT APPLY/REMOVE ==========
+local function RemoveAllSkins(ped, wHash)
+    for _, model in ipairs(ALL_SKIN_MODELS) do
+        local h = GetHashKey(model)
+        pcall(function()
+            if HasPedGotWeaponComponent(ped, wHash, h) then
+                RemoveWeaponComponentFromPed(ped, wHash, h)
+            end
+        end)
+    end
+end
+
+local function ApplySkin(ped, wHash, skinData)
+    if not skinData then return false end
+    RemoveAllSkins(ped, wHash)
+    local compHash = GetHashKey(skinData.skinModel)
+    GiveWeaponComponentToPed(ped, wHash, compHash)
+    return true
+end
+
+-- ========== EFFECT CONFIG FROM Ex_Weaponeffects ==========
 local function GetEffectConfig(skinData)
-    if not skinData or not skinData.modelHash then return nil end
-    local modelH = GetHashKey(skinData.modelHash)
+    if not skinData then return nil end
+    local modelH = GetHashKey(skinData.skinModel)
     local cfg = nil
     pcall(function()
-        if Config and Config.Weapon then
-            cfg = Config.Weapon[modelH]
-        end
+        if Config and Config.Weapon then cfg = Config.Weapon[modelH] end
     end)
     return cfg
 end
 
+-- ========== HOLD EFFECT LOOP ==========
 local function PlayHoldEffect(ped, skinData)
     local cfg = GetEffectConfig(skinData)
     if not cfg or not cfg.EffectCarry or not cfg.EffectCarry.Effect then return end
@@ -216,16 +160,14 @@ local function PlayHoldEffect(ped, skinData)
                     ef.Name, weaponEntity,
                     pos.posx or 0.0, pos.posy or 0.0, pos.posz or 0.0,
                     pos.rotx or 0.0, pos.roty or 0.0, pos.rotz or 0.0,
-                    pos.scale or 1.0,
-                    false, false, false
+                    pos.scale or 1.0, false, false, false
                 )
             else
                 StartParticleFxNonLoopedOnPedBone(
                     ef.Name, ped,
                     pos.posx or 0.0, pos.posy or 0.0, pos.posz or 0.0,
                     pos.rotx or 0.0, pos.roty or 0.0, pos.rotz or 0.0,
-                    57005, pos.scale or 1.0,
-                    false, false, false
+                    57005, pos.scale or 1.0, false, false, false
                 )
             end
         end
@@ -256,11 +198,17 @@ local function StartHoldFxLoop(skinData)
     end)
 end
 
--- ========== HIT/KILL EFFECTS (LOCAL) ==========
+-- ========== STOP ALL EFFECTS ==========
+local function StopAllEffects()
+    holdFxRunning = false
+    autoEquipRunning = false
+    ClearAllPtfx()
+end
+
+-- ========== HIT/KILL EFFECTS ==========
 local function PlayHitEffect(skinData, victimPed, isDead)
     local cfg = GetEffectConfig(skinData)
     if not cfg then return end
-
     local now = GetGameTimer()
     if now - lastEffectTime < 3000 then return end
     lastEffectTime = now
@@ -269,21 +217,14 @@ local function PlayHitEffect(skinData, victimPed, isDead)
     if not effectWeapon then return end
 
     local shouldPlay = false
-    if effectWeapon.CriticalEffect == 'kill' then
-        shouldPlay = isDead
-    elseif effectWeapon.CriticalEffect == 'cri' then
-        shouldPlay = isDead
-    else
-        shouldPlay = true
-    end
+    if effectWeapon.CriticalEffect == 'kill' then shouldPlay = isDead
+    elseif effectWeapon.CriticalEffect == 'cri' then shouldPlay = isDead
+    else shouldPlay = true end
     if not shouldPlay then return end
 
     local entries = {}
-    if type(effectWeapon.ParticleEffect) == 'table' then
-        entries = effectWeapon.ParticleEffect
-    elseif effectWeapon.NameParticleEffect then
-        entries = { effectWeapon }
-    end
+    if type(effectWeapon.ParticleEffect) == 'table' then entries = effectWeapon.ParticleEffect
+    elseif effectWeapon.NameParticleEffect then entries = { effectWeapon } end
 
     for _, ef in ipairs(entries) do
         local namePair = ef.NameParticleEffect
@@ -299,8 +240,7 @@ local function PlayHitEffect(skinData, victimPed, isDead)
                         ef.rotationX or effectWeapon.rotationX or 0.0,
                         ef.rotationY or effectWeapon.rotationY or 90.0,
                         ef.rotationZ or effectWeapon.rotationZ or 0.0,
-                        31086,
-                        ef.Scale or effectWeapon.Scale or 1.0,
+                        31086, ef.Scale or effectWeapon.Scale or 1.0,
                         false, false, false
                     )
                 end
@@ -327,14 +267,11 @@ local function RegisterDamageHandler()
     AddEventHandler("gameEventTriggered", function(eventName, eventData)
         if not active or not currentSkinKey then return end
         if eventName ~= "CEventNetworkEntityDamage" then return end
-        local victim = eventData[1]
-        local attacker = eventData[2]
+        local victim, attacker = eventData[1], eventData[2]
         local ped = PlayerPedId()
         if attacker ~= ped or victim == ped then return end
-
         local skinData = SKIN_DB[currentSkinKey]
         if not skinData then return end
-
         local isDead = eventData[4] == 1 or IsEntityDead(victim)
         PlayHitEffect(skinData, victim, isDead)
     end)
@@ -351,8 +288,9 @@ local function StartAutoEquip(skinData)
             if holding then
                 local wType = GetWeaponType(curWeapon)
                 if wType == skinData.weaponType or wType == nil then
-                    local compHash = GetHashKey(skinData.component)
+                    local compHash = GetHashKey(skinData.skinModel)
                     if not HasPedGotWeaponComponent(ped, curWeapon, compHash) then
+                        RemoveAllSkins(ped, curWeapon)
                         GiveWeaponComponentToPed(ped, curWeapon, compHash)
                     end
                     equippedWeaponHash = curWeapon
@@ -381,7 +319,7 @@ TriggerServerEvent = function(eventName, ...)
     return origTSE(eventName, ...)
 end
 
--- ========== MSG HELPER ==========
+-- ========== HELPERS ==========
 local function SendMsg(text)
     print("^3[SKIN]^7 " .. text)
     pcall(function()
@@ -393,7 +331,6 @@ end
 CreateThread(function()
     Wait(2000)
     BuildHashCache()
-    print("^2[SKIN-BYPASS] Hash cache built^7")
 end)
 
 -- ========== /skinlist ==========
@@ -406,11 +343,12 @@ RegisterCommand('skinlist', function()
             local hasFx = ""
             local cfg = GetEffectConfig(data)
             if cfg then
-                local fx = (cfg.EffectWeapon) and "FX" or ""
-                local hand = (cfg.EffectCarry and cfg.EffectCarry.Effect) and "+HAND" or ""
-                local scr = (cfg.EffectImg and cfg.EffectImg.ImageShow) and "+SCR" or ""
-                local snd = (cfg.EffectImg and cfg.EffectImg.SoundName) and "+SND" or ""
-                hasFx = (" ^5[%s%s%s%s]^7"):format(fx, hand, scr, snd)
+                local parts = {}
+                if cfg.EffectWeapon then parts[#parts+1] = "FX" end
+                if cfg.EffectCarry and cfg.EffectCarry.Effect then parts[#parts+1] = "HAND" end
+                if cfg.EffectImg and cfg.EffectImg.ImageShow then parts[#parts+1] = "SCR" end
+                if cfg.EffectImg and cfg.EffectImg.SoundName then parts[#parts+1] = "SND" end
+                if #parts > 0 then hasFx = (" ^5[%s]^7"):format(table.concat(parts, "+")) end
             end
             print(("  ^6/skin %-15s^7 = %s%s%s"):format(key, data.label, hasFx, marker))
         end
@@ -422,19 +360,19 @@ RegisterCommand('skinlist', function()
             local hasFx = ""
             local cfg = GetEffectConfig(data)
             if cfg then
-                local fx = (cfg.EffectWeapon) and "FX" or ""
-                local hand = (cfg.EffectCarry and cfg.EffectCarry.Effect) and "+HAND" or ""
-                local scr = (cfg.EffectImg and cfg.EffectImg.ImageShow) and "+SCR" or ""
-                local snd = (cfg.EffectImg and cfg.EffectImg.SoundName) and "+SND" or ""
-                hasFx = (" ^5[%s%s%s%s]^7"):format(fx, hand, scr, snd)
+                local parts = {}
+                if cfg.EffectWeapon then parts[#parts+1] = "FX" end
+                if cfg.EffectCarry and cfg.EffectCarry.Effect then parts[#parts+1] = "HAND" end
+                if cfg.EffectImg and cfg.EffectImg.ImageShow then parts[#parts+1] = "SCR" end
+                if cfg.EffectImg and cfg.EffectImg.SoundName then parts[#parts+1] = "SND" end
+                if #parts > 0 then hasFx = (" ^5[%s]^7"):format(table.concat(parts, "+")) end
             end
             print(("  ^6/skin %-15s^7 = %s%s%s"):format(key, data.label, hasFx, marker))
         end
     end
     print("")
-    print("^3วิธีใช้:^7 ถืออาวุธแล้วพิมพ์ ^6/skin [ชื่อ]^7 เช่น ^6/skin syrus_pool^7")
-    print("^3ถอด:^7 ^1/skin off^7")
-    print("^3Debug:^7 ^6/skindebug^7 (ดู hash อาวุธที่ถืออยู่)")
+    print("^3วิธีใช้:^7 ถืออาวุธแล้วพิมพ์ ^6/skin [ชื่อ]^7 เช่น ^6/skin syrus^7")
+    print("^3ถอด:^7 ^1/skin off^7 | ^3Debug:^7 ^6/skindebug^7")
     print("^2========================================================^7")
     SendMsg("^2รายชื่อสกินขึ้นใน F8 แล้ว^0")
 end, false)
@@ -446,33 +384,33 @@ RegisterCommand('skindebug', function()
     local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
     local wType = GetWeaponType(curWeapon)
     local modelHash = nil
-    if wpEntity ~= 0 and DoesEntityExist(wpEntity) then
-        modelHash = GetEntityModel(wpEntity)
-    end
+    if wpEntity ~= 0 and DoesEntityExist(wpEntity) then modelHash = GetEntityModel(wpEntity) end
 
     print("^2========== [SKIN DEBUG] ==========^7")
-    print(("  ^3Weapon Hash:^7 %s (%s)"):format(tostring(curWeapon), tostring(curWeapon and string.format("0x%X", curWeapon & 0xFFFFFFFF) or "nil")))
-    print(("  ^3Weapon Entity:^7 %s (exists: %s)"):format(tostring(wpEntity), tostring(wpEntity ~= 0 and DoesEntityExist(wpEntity))))
+    print(("  ^3Weapon Hash:^7 %s (0x%X)"):format(curWeapon, curWeapon & 0xFFFFFFFF))
+    print(("  ^3Weapon Entity:^7 %s (exists: %s)"):format(wpEntity, tostring(wpEntity ~= 0 and DoesEntityExist(wpEntity))))
     print(("  ^3Model Hash:^7 %s"):format(tostring(modelHash)))
-    print(("  ^3Detected Type:^7 %s"):format(tostring(wType) or "UNKNOWN"))
-    print(("  ^3Is Unarmed:^7 %s"):format(tostring(curWeapon == GetHashKey('WEAPON_UNARMED'))))
+    print(("  ^3Detected Type:^7 %s"):format(tostring(wType or "UNKNOWN")))
+    print(("  ^3Active skin:^7 %s | active: %s"):format(tostring(currentSkinKey or "none"), tostring(active)))
 
     print("  ^3Hash checks:^7")
     local testNames = {'WEAPON_POOLCUE','WEAPON_POOLCUE1','WEAPON_POOLCUE2','WEAPON_POOLCUE3','WEAPON_BOTTLE','WEAPON_BOTTLE1','WEAPON_BOTTLE2','WEAPON_BOTTLE3','WEAPON_KNIFE','WEAPON_DAGGER'}
     for _, name in ipairs(testNames) do
         local h = GetHashKey(name)
-        local match = (h == curWeapon) and "^2 << MATCH!^7" or ""
-        local matchNeg = ""
-        if h ~= curWeapon then
-            if curWeapon < 0 and (curWeapon + 0x100000000) == h then matchNeg = "^2 << MATCH (unsigned)!^7"
-            elseif curWeapon > 0 and (curWeapon - 0x100000000) == h then matchNeg = "^2 << MATCH (signed)!^7"
-            end
+        local match = ""
+        if h == curWeapon then match = "^2 << MATCH!^7"
+        elseif curWeapon < 0 and (curWeapon + 0x100000000) == h then match = "^2 << MATCH (unsigned)!^7"
+        elseif curWeapon > 0 and (curWeapon - 0x100000000) == h then match = "^2 << MATCH (signed)!^7"
         end
-        print(("    %s = %s%s%s"):format(name, tostring(h), match, matchNeg))
+        print(("    %s = %s%s"):format(name, h, match))
     end
 
-    print(("  ^3Active skin:^7 %s"):format(tostring(currentSkinKey) or "none"))
-    print(("  ^3Active:^7 %s"):format(tostring(active)))
+    if currentSkinKey and SKIN_DB[currentSkinKey] then
+        local sd = SKIN_DB[currentSkinKey]
+        local compHash = GetHashKey(sd.skinModel)
+        local has = HasPedGotWeaponComponent(ped, curWeapon, compHash)
+        print(("  ^3Skin component:^7 %s (hash: %s) applied: %s"):format(sd.skinModel, compHash, tostring(has)))
+    end
     print("^2===================================^7")
     SendMsg("^2Debug info ขึ้นใน F8 แล้ว^0")
 end, false)
@@ -484,33 +422,20 @@ RegisterCommand('skin', function(_, args)
     local curWeapon = GetSelectedPedWeapon(ped)
 
     if not input or input == '' then
-        SendMsg("^3พิมพ์ /skinlist ดูรายชื่อสกิน | /skin [ชื่อ] ใส่สกิน | /skin off ถอด^0")
+        SendMsg("^3/skinlist ดูสกิน | /skin [ชื่อ] ใส่สกิน | /skin off ถอด^0")
         return
     end
-
-    if input:lower() == 'list' then
-        ExecuteCommand('skinlist')
-        return
-    end
+    if input:lower() == 'list' then ExecuteCommand('skinlist') return end
+    if input:lower() == 'debug' then ExecuteCommand('skindebug') return end
 
     if input:lower() == 'off' or input:lower() == 'clear' or input:lower() == 'default' then
-        if equippedWeaponHash and currentSkinKey then
-            RemoveAllSkinComponents(ped, equippedWeaponHash)
-        end
-        if curWeapon and curWeapon ~= GetHashKey('WEAPON_UNARMED') then
-            RemoveAllSkinComponents(ped, curWeapon)
-        end
+        StopAllEffects()
+        if equippedWeaponHash then RemoveAllSkins(ped, equippedWeaponHash) end
+        if curWeapon and curWeapon ~= GetHashKey('WEAPON_UNARMED') then RemoveAllSkins(ped, curWeapon) end
         currentSkinKey = nil
         equippedWeaponHash = nil
         active = false
-        autoEquipRunning = false
-        holdFxRunning = false
-        SendMsg("^1[OFF]^0 ถอดสกินแล้ว")
-        return
-    end
-
-    if input:lower() == 'debug' then
-        ExecuteCommand('skindebug')
+        SendMsg("^1[OFF]^0 ถอดสกินและเอฟเฟคทั้งหมดแล้ว")
         return
     end
 
@@ -521,26 +446,17 @@ RegisterCommand('skin', function(_, args)
     end
 
     local wType = GetWeaponType(heldWeapon)
-
     local searchLower = input:lower()
     local foundKey, foundData = nil, nil
 
-    -- exact match first
-    if SKIN_DB[input] then
-        foundKey, foundData = input, SKIN_DB[input]
-    end
+    if SKIN_DB[input] then foundKey, foundData = input, SKIN_DB[input] end
 
-    -- exact key match (case insensitive)
     if not foundKey then
         for key, data in pairs(SKIN_DB) do
-            if key:lower() == searchLower then
-                foundKey, foundData = key, data
-                break
-            end
+            if key:lower() == searchLower then foundKey, foundData = key, data break end
         end
     end
 
-    -- partial match - prefer same weapon type, fallback to any
     if not foundKey then
         local fallbackKey, fallbackData = nil, nil
         for key, data in pairs(SKIN_DB) do
@@ -553,9 +469,7 @@ RegisterCommand('skin', function(_, args)
                 end
             end
         end
-        if not foundKey and fallbackKey then
-            foundKey, foundData = fallbackKey, fallbackData
-        end
+        if not foundKey and fallbackKey then foundKey, foundData = fallbackKey, fallbackData end
     end
 
     if not foundKey or not foundData then
@@ -563,21 +477,18 @@ RegisterCommand('skin', function(_, args)
         return
     end
 
-    -- ถอดสกินเดิม
-    if currentSkinKey and equippedWeaponHash then
-        RemoveAllSkinComponents(ped, equippedWeaponHash)
-    end
-    if heldWeapon ~= equippedWeaponHash then
-        RemoveAllSkinComponents(ped, heldWeapon)
-    end
-    holdFxRunning = false
-    autoEquipRunning = false
-    Wait(100)
+    -- หยุดเอฟเฟคเก่าทั้งหมดก่อน
+    StopAllEffects()
+    Wait(50)
+
+    -- ถอดสกินเก่า
+    if equippedWeaponHash then RemoveAllSkins(ped, equippedWeaponHash) end
+    if heldWeapon ~= equippedWeaponHash then RemoveAllSkins(ped, heldWeapon) end
 
     currentSkinKey = foundKey
     active = true
 
-    ApplySkinComponent(ped, heldWeapon, foundData)
+    ApplySkin(ped, heldWeapon, foundData)
     equippedWeaponHash = heldWeapon
 
     StartAutoEquip(foundData)
