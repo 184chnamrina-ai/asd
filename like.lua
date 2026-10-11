@@ -282,9 +282,10 @@ local function findSkinEntry(query, weaponKey)
     return nil
 end
 
-local function removeAllComps(ped, wHash)
+local function removeAllComps(ped, wHash, weaponKey)
+    local baseH = weaponKey and getBaseHash(weaponKey) or wHash
     for ch in pairs(allCompHashes) do
-        if origHas(ped, wHash, ch) then origRemove(ped, wHash, ch) end
+        if origHas(ped, baseH, ch) then origRemove(ped, baseH, ch) end
     end
 end
 
@@ -367,18 +368,29 @@ end
 -- ============================================================================
 -- 6. APPLY / REMOVE
 -- ============================================================================
+-- Components ลงทะเบียนใน meta ของ base weapon เท่านั้น (ไม่ใช่ variant)
+local BASE_WEAPON_HASH = {
+    WEAPON_POOLCUE = GetHashKey('WEAPON_POOLCUE'),
+}
+
+local function getBaseHash(weaponKey)
+    return BASE_WEAPON_HASH[weaponKey] or GetHashKey(weaponKey)
+end
+
 local function applySkin(entry)
     local ped = PlayerPedId()
     local cur = GetSelectedPedWeapon(ped)
     if cur == GetHashKey('WEAPON_UNARMED') or cur == 0 then return false end
-    GiveWeaponComponentToPed(ped, cur, GetHashKey(entry.comp))
+    local baseH = getBaseHash(entry.weaponKey)
+    GiveWeaponComponentToPed(ped, baseH, GetHashKey(entry.comp))
     activeWeaponHash = cur
     return true
 end
 
 local function removeSkin()
     if activeSkin and activeWeaponHash then
-        origRemove(PlayerPedId(), activeWeaponHash, GetHashKey(activeSkin.comp))
+        local baseH = getBaseHash(activeSkin.weaponKey)
+        origRemove(PlayerPedId(), baseH, GetHashKey(activeSkin.comp))
     end
     activeSkin = nil
     activeWeaponHash = nil
@@ -399,9 +411,10 @@ local function startAutoEquip()
             if cur ~= GetHashKey('WEAPON_UNARMED') and cur ~= 0 and not IsEntityDead(ped) then
                 local wKey = getWeaponKey(cur)
                 if wKey and wKey == activeSkin.weaponKey then
+                    local baseH = getBaseHash(activeSkin.weaponKey)
                     local compHash = GetHashKey(activeSkin.comp)
-                    if not origHas(ped, cur, compHash) then
-                        GiveWeaponComponentToPed(ped, cur, compHash)
+                    if not origHas(ped, baseH, compHash) then
+                        GiveWeaponComponentToPed(ped, baseH, compHash)
                     end
                     activeWeaponHash = cur
                 end
@@ -506,7 +519,7 @@ RegisterCommand('home', function(_, args)
     if lo == 'off' or lo == 'default' or lo == 'remove' or lo == '0' then
         removeSkin()
         if cur ~= GetHashKey('WEAPON_UNARMED') and cur ~= 0 then
-            removeAllComps(ped, cur)
+            removeAllComps(ped, cur, wKey)
         end
         print("^1[W-SKIN]^7 ถอดสกินเรียบร้อย")
         return
@@ -524,7 +537,7 @@ RegisterCommand('home', function(_, args)
     end
 
     removeSkin()
-    removeAllComps(ped, cur)
+    removeAllComps(ped, cur, wKey)
 
     activeSkin = entry
     local ok = applySkin(entry)
@@ -568,9 +581,11 @@ RegisterCommand('homedebug', function()
     end
 
     -- แสดง component ที่ติดอยู่
+    local baseH = wKey and getBaseHash(wKey) or cur
+    print(("  ^6Base hash สำหรับ comp:^7 0x%08X"):format(baseH & 0xFFFFFFFF))
     local compCount = 0
     for ch in pairs(allCompHashes) do
-        if origHas(ped, cur, ch) then
+        if origHas(ped, baseH, ch) then
             compCount = compCount + 1
             print(("  ^6Component ติดอยู่:^7 hash %s"):format(tostring(ch)))
         end
