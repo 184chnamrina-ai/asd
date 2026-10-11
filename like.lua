@@ -1,14 +1,12 @@
 -- ====================================================================================
--- W-SKINSHOWCASE BYPASS — LIKE TOWN OFFICIAL SKINS ONLY
--- ดึงเฉพาะสกินของเซิร์ฟเวอร์ Like Town (Config.WeaponSkinsData) เท่านั้น 100%
+-- W-SKINSHOWCASE BYPASS — LIKE TOWN OFFICIAL SKINS ONLY (POOLCUE & BOTTLE ONLY)
+-- ดึงเฉพาะสกินของเซิร์ฟเวอร์ Like Town (Config.WeaponSkinsData) สำหรับ Poolcue และ Bottle เท่านั้น 100%
 -- ระบบคำสั่ง: /home [ชื่อ] | /homeoff | /homelist
 -- แก้บัคไม้ไม่หาย / ไม้ค้างหลุดมือ / ไม้บิดขวางเอว 100%
 -- ====================================================================================
 
-print("^2[W-SKINSHOWCASE]^7 โหลดระบบสกิน Like Town สำเร็จ! พิมพ์ /homelist เพื่อดูรายชื่อสกิน^7")
-
 -- ====================================================================================
--- 1. ตารางอาวุธในเซิร์ฟเวอร์ LIKE TOWN (ครอบคลุมทุก Variant และชื่อ Meta)
+-- 1. ตารางอาวุธในเซิร์ฟเวอร์ LIKE TOWN (เฉพาะ POOLCUE และ BOTTLE ทุก Variant)
 -- ====================================================================================
 local SERVER_WEAPONS = {
     ['WEAPON_POOLCUE'] = {
@@ -22,11 +20,6 @@ local SERVER_WEAPONS = {
         'WEAPON_WM_VIREX_POOL', 'WEAPON_POOLCUEWAR', 'WEAPON_POOLCUE_TIER0', 'WEAPON_POOLCUE_TIER1',
         'WEAPON_POOLCUE_TIER2', 'WEAPON_POOLCUE_TIER3', 'WEAPON_POOLCUE_BATTLE'
     },
-    ['WEAPON_KNIFE'] = {
-        'WEAPON_KNIFE', 'WEAPON_KNIFEWARZONE', 'WEAPON_KNIFE_COUNCIL', 'WEAPON_KNIFE0', 'WEAPON_KNIFE1',
-        'WEAPON_KNIFE2', 'WEAPON_KNIFE3', 'WEAPON_KNIFE4', 'WEAPON_KNIFE5', 'WEAPON_RYX_KNIFE',
-        'WEAPON_THINGS_CHROMEACE_KNIFE_PINK', 'WEAPON_THINGS_CHROMEACE_KNIFE_SILVER'
-    },
     ['WEAPON_BOTTLE'] = {
         'WEAPON_BOTTLE', 'WEAPON_BOTTLE_NEWPLAYER', 'WEAPON_BOTTLE_COUNCIL', 'WEAPON_BOTTLEWARZONE',
         'WEAPON_BOTTLE0', 'WEAPON_BOTTLE1', 'WEAPON_BOTTLE2', 'WEAPON_BOTTLE3', 'WEAPON_BOTTLE4',
@@ -35,32 +28,6 @@ local SERVER_WEAPONS = {
         'WEAPON_BOTTLE_NEWBIE', 'WEAPON_BOTTLE_WELFARE', 'WEAPON_BOTTLEAVENGER', 'WEAPON_RABBIT_BOTTLE',
         'WEAPON_WIP_SNOW_BOTTLE', 'WEAPON_THINGS_CHROMEACE_BOTTLE_PINK', 'WEAPON_THINGS_CHROMEACE_BOTTLE_SILVER',
         'WEAPON_BOTTLE_TIER1', 'WEAPON_BOTTLE_TIER2', 'WEAPON_BOTTLE_TIER3', 'WEAPON_BOTTLE_BATTLE'
-    },
-    ['WEAPON_DAGGER'] = {
-        'WEAPON_DAGGER', 'WEAPON_DAGGER0', 'WEAPON_DAGGER1', 'WEAPON_DAGGER2', 'WEAPON_DAGGER3',
-        'WEAPON_DAGGERLV+1', 'WEAPON_DAGGERLV+2', 'WEAPON_DAGGERLV+3'
-    },
-    ['WEAPON_MACHETE'] = {
-        'WEAPON_MACHETE', 'WEAPON_MACHETEWARZONE', 'WEAPON_MACHETE0', 'WEAPON_MACHETE1', 'WEAPON_MACHETE2',
-        'WEAPON_MACHETE3', 'WEAPON_MACHETELV1', 'WEAPON_MACHETELV2', 'WEAPON_MACHETELV3', 'WEAPON_MACHETELV4',
-        'WEAPON_MACHETTE_I', 'WEAPON_MACHETTE_II', 'WEAPON_MACHETTE_III', 'WEAPON_RYX_MACHETTE',
-        'WEAPON_WM_VIREX_MACHETE', 'WEAPON_THINGS_CHROMEACE_MACHETE_PINK', 'WEAPON_THINGS_CHROMEACE_MACHETE_SILVER',
-        'WEAPON_MACHETE_LV1', 'WEAPON_MACHETE_LV2', 'WEAPON_MACHETE_LV3'
-    },
-    ['WEAPON_KNUCKLE'] = {
-        'WEAPON_KNUCKLE', 'WEAPON_KNUCKLEDUSTER', 'WEAPON_KNUCKLEWARZONE', 'WEAPON_KNUCKLE0', 'WEAPON_KNUCKLE1',
-        'WEAPON_KNUCKLE2', 'WEAPON_KNUCKLE3', 'WEAPON_KNUCKLELV1', 'WEAPON_KNUCKLELV2', 'WEAPON_KNUCKLELV3',
-        'WEAPON_KNUCKLELV4', 'WEAPON_KNUCKLELV5', 'WEAPON_RYX_KNUCKLE', 'WEAPON_THINGS_CHROMEACE_KNUCKLE_PINK',
-        'WEAPON_THINGS_CHROMEACE_KNUCKLE_SILVER', 'WEAPON_KNUCKLE_LV1', 'WEAPON_KNUCKLE_LV2', 'WEAPON_KNUCKLE_LV3'
-    },
-    ['WEAPON_REVOLVER'] = {
-        'WEAPON_REVOLVER', 'WEAPON_REVOLVER_MK2', 'WEAPON_REVOLVERWARZONE', 'WEAPON_REVOLVER_COUNCIL',
-        'WEAPON_REVOLVERLV1', 'WEAPON_REVOLVERLV2', 'WEAPON_REVOLVERLV3', 'WEAPON_REVOLVER_LV0',
-        'WEAPON_REVOLVER_LV1', 'WEAPON_REVOLVER_LV2', 'WEAPON_REVOLVER_LV3', 'WEAPON_REVOLVER_LV4',
-        'WEAPON_RYX_GUN', 'WEAPON_THINGS_CHROMEACE_REVOLVER_PINK', 'WEAPON_THINGS_CHROMEACE_REVOLVER_SILVER'
-    },
-    ['WEAPON_BAT'] = {
-        'WEAPON_BAT', 'WEAPON_BAT0', 'WEAPON_BAT1', 'WEAPON_BAT2', 'WEAPON_BAT3', 'WEAPON_RYX_BAT'
     }
 }
 
@@ -93,55 +60,19 @@ local ATTACH_CONFIG = {
         Rot = { x = -77.0, y = -23.0, z = -16.0 },
         RotOrder = 0  -- XYZ มาตรฐาน
     },
-    ['WEAPON_BAT'] = {
-        Bone = 28422,
-        Pos = { x = 0.055, y = 0.045, z = 0.01 },
-        Rot = { x = -77.0, y = -23.0, z = -16.0 },
-        RotOrder = 0
-    },
-    ['WEAPON_KNIFE'] = {
-        Bone = 28422,
-        Pos = { x = 0.08, y = 0.02, z = -0.02 },
-        Rot = { x = -85.0, y = 0.0, z = 0.0 },
-        RotOrder = 0
-    },
     ['WEAPON_BOTTLE'] = {
         Bone = 28422,
         Pos = { x = 0.08, y = 0.02, z = -0.02 },
-        Rot = { x = -85.0, y = 0.0, z = 0.0 },
-        RotOrder = 0
-    },
-    ['WEAPON_DAGGER'] = {
-        Bone = 28422,
-        Pos = { x = 0.08, y = 0.02, z = -0.02 },
-        Rot = { x = -85.0, y = 0.0, z = 0.0 },
-        RotOrder = 0
-    },
-    ['WEAPON_MACHETE'] = {
-        Bone = 28422,
-        Pos = { x = 0.08, y = 0.02, z = 0.0 },
-        Rot = { x = -85.0, y = 0.0, z = 0.0 },
-        RotOrder = 0
-    },
-    ['WEAPON_KNUCKLE'] = {
-        Bone = 28422,
-        Pos = { x = 0.06, y = 0.03, z = -0.01 },
-        Rot = { x = -85.0, y = 0.0, z = 0.0 },
-        RotOrder = 0
-    },
-    ['WEAPON_REVOLVER'] = {
-        Bone = 28422,
-        Pos = { x = 0.05, y = 0.02, z = 0.0 },
         Rot = { x = -85.0, y = 0.0, z = 0.0 },
         RotOrder = 0
     }
 }
 
 -- ====================================================================================
--- 3. ฐานข้อมูลสกินเฉพาะเซิร์ฟเวอร์ LIKE TOWN (จาก w-skinshowcase/config.skins.lua)
+-- 3. ฐานข้อมูลสกินเฉพาะเซิร์ฟเวอร์ LIKE TOWN (ครบทุกสกินของ POOLCUE และ BOTTLE)
 -- ====================================================================================
 local SERVER_SKINS_DB = {
-    -- ─── 1. ไม้พูล (WEAPON_POOLCUE) ───
+    -- ─── 1. ไม้พูล (WEAPON_POOLCUE) — ครบทั้ง 15 สกิน ───
     { id='halloween', label='Halloween', weapon='WEAPON_POOLCUE', model='lz_halloween_pool', comp='COMPONENT_POOLCUE_HALLOWEEN',
       fx = { hold={dict='lz_halloween_fx', particle='halloween_hit', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit', scale=1.0}, sound='lz_halloween_ovl.mp3', hud='lz_halloween_ovl' } },
     { id='halloween_pink', label='Halloween Pink', weapon='WEAPON_POOLCUE', model='lz_halloween_pool_pink', comp='COMPONENT_POOLCUE_HALLOWEEN_PINK',
@@ -162,6 +93,8 @@ local SERVER_SKINS_DB = {
       fx = { kill={dict='weapon_wishme', particle='wishme', scale=1.5}, sound='wishme_hit.ogg', hud='chromium_effect' } },
     { id='bape', label='Bape', weapon='WEAPON_POOLCUE', model='poolcue_bape', comp='COMPONENT_POOLCUE_BAPE',
       fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
+    { id='liketown', label='LikeTown', weapon='WEAPON_POOLCUE', model='liketown_poolcue', comp='COMPONENT_POOLCUE_LIKETOWN',
+      fx = { kill={dict='dfx_ptfx_1', particle='dfx_particle_liketownbetax', scale=0.2}, hud='effect_liketownbetax' } },
     { id='virex', label='Virex', weapon='WEAPON_POOLCUE', model='wm_virex_pool', comp='COMPONENT_POOLCUE_VIREX',
       fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
     { id='chromeace_pink', label='ChromeAce Pink', weapon='WEAPON_POOLCUE', model='things_chromeace_pool_pink', comp='COMPONENT_POOLCUE_CHROMEACE_PINK',
@@ -171,29 +104,7 @@ local SERVER_SKINS_DB = {
     { id='baldwin', label='Baldwin', weapon='WEAPON_POOLCUE', model='wm_baldwin_pool', comp='COMPONENT_POOLCUE_BALDWIN',
       fx = { hold={dict='handbaldwin', particle='handbaldwin', bone=57005, scale=0.10}, sound='baldwin.mp3', hud='baldwin' } },
 
-    -- ─── 2. มีดพก (WEAPON_KNIFE) ───
-    { id='halloween', label='Halloween', weapon='WEAPON_KNIFE', model='lz_halloween_knife', comp='COMPONENT_KNIFE_HALLOWEEN',
-      fx = { hold={dict='lz_halloween_fx', particle='halloween_hit', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit', scale=1.0}, sound='lz_halloween_ovl.mp3', hud='lz_halloween_ovl' } },
-    { id='halloween_pink', label='Halloween Pink', weapon='WEAPON_KNIFE', model='lz_halloween_knife_pink', comp='COMPONENT_KNIFE_HALLOWEEN_PINK',
-      fx = { hold={dict='lz_halloween_fx', particle='halloween_hit_pink', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit_pink', scale=1.0}, sound='lz_halloweenpink_ovl.mp3', hud='lz_halloweenpink_ovl' } },
-    { id='brush', label='Brush', weapon='WEAPON_KNIFE', model='drop_knife_brush', comp='COMPONENT_KNIFE_BRUSH',
-      fx = { kill={dict='drop_brush', particle='drop_particle_brush', scale=1.5}, hud='effect_brush' } },
-    { id='greentea', label='Green Tea', weapon='WEAPON_KNIFE', model='drop_knife_greentea', comp='COMPONENT_KNIFE_GREENTEA',
-      fx = { kill={dict='drop_greentea', particle='drop_particle_greentea', scale=1.5}, hud='effect_greentea' } },
-    { id='lava', label='Lava', weapon='WEAPON_KNIFE', model='dfx_knife_lava', comp='COMPONENT_KNIFE_LAVA',
-      fx = { kill={dict='dfx_lava', particle='dfx_particle_lava', scale=1.5}, hud='effect_lava' } },
-    { id='bape', label='Bape', weapon='WEAPON_KNIFE', model='knife_bape', comp='COMPONENT_KNIFE_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-    { id='virex', label='Virex', weapon='WEAPON_KNIFE', model='wm_virex_knife', comp='COMPONENT_KNIFE_VIREX',
-      fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
-    { id='chromeace_pink', label='ChromeAce Pink', weapon='WEAPON_KNIFE', model='things_chromeace_knife_pink', comp='COMPONENT_KNIFE_CHROMEACE_PINK',
-      fx = { kill={dict='things_chromeace_pink', particle='things_chromeace_pink', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_pink_screen' } },
-    { id='chromeace_silver', label='ChromeAce Silver', weapon='WEAPON_KNIFE', model='things_chromeace_knife_sliver', comp='COMPONENT_KNIFE_CHROMEACE_SILVER',
-      fx = { kill={dict='things_chromeace_silver', particle='things_chromeace_silver', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_silver_screen' } },
-    { id='baldwin', label='Baldwin', weapon='WEAPON_KNIFE', model='wm_baldwin_knife', comp='COMPONENT_KNIFE_BALDWIN',
-      fx = { hold={dict='handbaldwin', particle='handbaldwin', bone=57005, scale=0.10}, sound='baldwin.mp3', hud='baldwin' } },
-
-    -- ─── 3. ขวด (WEAPON_BOTTLE) ───
+    -- ─── 2. ขวด (WEAPON_BOTTLE) — ครบทั้ง 12 สกิน ───
     { id='halloween', label='Halloween', weapon='WEAPON_BOTTLE', model='lz_halloween_knife', comp='COMPONENT_BOTTLE_HALLOWEEN',
       fx = { hold={dict='lz_halloween_fx', particle='halloween_hit', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit', scale=1.0}, sound='lz_halloween_ovl.mp3', hud='lz_halloween_ovl' } },
     { id='halloween_pink', label='Halloween Pink', weapon='WEAPON_BOTTLE', model='lz_halloween_knife_pink', comp='COMPONENT_BOTTLE_HALLOWEEN_PINK',
@@ -217,77 +128,7 @@ local SERVER_SKINS_DB = {
     { id='virex', label='Virex', weapon='WEAPON_BOTTLE', model='wm_virex_knife', comp='COMPONENT_BOTTLE_VIREX',
       fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
     { id='bape', label='Bape', weapon='WEAPON_BOTTLE', model='knife_bape', comp='COMPONENT_BOTTLE_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-
-    -- ─── 4. กริช (WEAPON_DAGGER) ───
-    { id='halloween', label='Halloween', weapon='WEAPON_DAGGER', model='lz_halloween_knife', comp='COMPONENT_DAGGER_HALLOWEEN',
-      fx = { hold={dict='lz_halloween_fx', particle='halloween_hit', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit', scale=1.0}, sound='lz_halloween_ovl.mp3', hud='lz_halloween_ovl' } },
-    { id='halloween_pink', label='Halloween Pink', weapon='WEAPON_DAGGER', model='lz_halloween_knife_pink', comp='COMPONENT_DAGGER_HALLOWEEN_PINK',
-      fx = { hold={dict='lz_halloween_fx', particle='halloween_hit_pink', bone=57005, scale=0.2}, kill={dict='lz_halloween_fx', particle='halloween_hit_pink', scale=1.0}, sound='lz_halloweenpink_ovl.mp3', hud='lz_halloweenpink_ovl' } },
-    { id='brush', label='Brush', weapon='WEAPON_DAGGER', model='drop_dagger_brush', comp='COMPONENT_DAGGER_BRUSH',
-      fx = { hold={dict='drop_brush', particle='drop_particle_brush', bone=58870, scale=0.5}, kill={dict='drop_brush', particle='drop_particle_brush', scale=1.5}, hud='effect_brush' } },
-    { id='greentea', label='Green Tea', weapon='WEAPON_DAGGER', model='drop_dagger_greentea', comp='COMPONENT_DAGGER_GREENTEA',
-      fx = { hold={dict='drop_greentea', particle='drop_particle_greentea', bone=58870, scale=0.5}, kill={dict='drop_greentea', particle='drop_particle_greentea', scale=1.5}, hud='effect_greentea' } },
-
-    -- ─── 5. มีดสปาต้า (WEAPON_MACHETE) ───
-    { id='brush', label='Brush', weapon='WEAPON_MACHETE', model='drop_machete_brush', comp='COMPONENT_MACHETE_BRUSH',
-      fx = { kill={dict='drop_brush', particle='drop_particle_brush', scale=1.5}, hud='effect_brush' } },
-    { id='greentea', label='Green Tea', weapon='WEAPON_MACHETE', model='drop_machete_greentea', comp='COMPONENT_MACHETE_GREENTEA',
-      fx = { kill={dict='drop_greentea', particle='drop_particle_greentea', scale=1.5}, hud='effect_greentea' } },
-    { id='lava', label='Lava', weapon='WEAPON_MACHETE', model='dfx_machete_lava', comp='COMPONENT_MACHETE_LAVA',
-      fx = { kill={dict='dfx_lava', particle='dfx_particle_lava', scale=1.5}, hud='effect_lava' } },
-    { id='bape', label='Bape', weapon='WEAPON_MACHETE', model='machette_bape', comp='COMPONENT_MACHETE_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-    { id='virex', label='Virex', weapon='WEAPON_MACHETE', model='wm_virex_machete', comp='COMPONENT_MACHETE_VIREX',
-      fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
-    { id='chromeace_pink', label='ChromeAce Pink', weapon='WEAPON_MACHETE', model='things_chromeace_machete_pink', comp='COMPONENT_MACHETE_CHROMEACE_PINK',
-      fx = { kill={dict='things_chromeace_pink', particle='things_chromeace_pink', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_pink_screen' } },
-    { id='chromeace_silver', label='ChromeAce Silver', weapon='WEAPON_MACHETE', model='things_chromeace_machete_sliver', comp='COMPONENT_MACHETE_CHROMEACE_SILVER',
-      fx = { kill={dict='things_chromeace_silver', particle='things_chromeace_silver', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_silver_screen' } },
-    { id='baldwin', label='Baldwin', weapon='WEAPON_MACHETE', model='wm_baldwin_machete', comp='COMPONENT_MACHETE_BALDWIN',
-      fx = { hold={dict='handbaldwin', particle='handbaldwin', bone=57005, scale=0.10}, sound='baldwin.mp3', hud='baldwin' } },
-
-    -- ─── 6. สนับมือ (WEAPON_KNUCKLE) ───
-    { id='brush', label='Brush', weapon='WEAPON_KNUCKLE', model='drop_knuckle_brush', comp='COMPONENT_KNUCKLE_BRUSH',
-      fx = { kill={dict='drop_brush', particle='drop_particle_brush', scale=1.5}, hud='effect_brush' } },
-    { id='greentea', label='Green Tea', weapon='WEAPON_KNUCKLE', model='drop_knuckle_greentea', comp='COMPONENT_KNUCKLE_GREENTEA',
-      fx = { kill={dict='drop_greentea', particle='drop_particle_greentea', scale=1.5}, hud='effect_greentea' } },
-    { id='lava', label='Lava', weapon='WEAPON_KNUCKLE', model='dfx_knuckle_lava', comp='COMPONENT_KNUCKLE_LAVA',
-      fx = { kill={dict='dfx_lava', particle='dfx_particle_lava', scale=1.5}, hud='effect_lava' } },
-    { id='bape', label='Bape', weapon='WEAPON_KNUCKLE', model='knuckle_bape', comp='COMPONENT_KNUCKLE_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-    { id='virex', label='Virex', weapon='WEAPON_KNUCKLE', model='wm_virex_knuckle', comp='COMPONENT_KNUCKLE_VIREX',
-      fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
-    { id='chromeace_pink', label='ChromeAce Pink', weapon='WEAPON_KNUCKLE', model='things_chromeace_knuckle_pink', comp='COMPONENT_KNUCKLE_CHROMEACE_PINK',
-      fx = { kill={dict='things_chromeace_pink', particle='things_chromeace_pink', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_pink_screen' } },
-    { id='chromeace_silver', label='ChromeAce Silver', weapon='WEAPON_KNUCKLE', model='things_chromeace_knuckle_sliver', comp='COMPONENT_KNUCKLE_CHROMEACE_SILVER',
-      fx = { kill={dict='things_chromeace_silver', particle='things_chromeace_silver', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_silver_screen' } },
-    { id='baldwin', label='Baldwin', weapon='WEAPON_KNUCKLE', model='wm_baldwin_knuckle', comp='COMPONENT_KNUCKLE_BALDWIN',
-      fx = { hold={dict='handbaldwin', particle='handbaldwin', bone=57005, scale=0.10}, sound='baldwin.mp3', hud='baldwin' } },
-
-    -- ─── 7. ปืนลูกโม่ (WEAPON_REVOLVER) ───
-    { id='brush', label='Brush', weapon='WEAPON_REVOLVER', model='drop_revolver_brush', comp='COMPONENT_REVOLVER_BRUSH',
-      fx = { kill={dict='drop_brush', particle='drop_particle_brush', scale=1.5}, hud='effect_brush' } },
-    { id='greentea', label='Green Tea', weapon='WEAPON_REVOLVER', model='drop_revolver_greentea', comp='COMPONENT_REVOLVER_GREENTEA',
-      fx = { kill={dict='drop_greentea', particle='drop_particle_greentea', scale=1.5}, hud='effect_greentea' } },
-    { id='lava', label='Lava', weapon='WEAPON_REVOLVER', model='dfx_revolver_lava', comp='COMPONENT_REVOLVER_LAVA',
-      fx = { kill={dict='dfx_lava', particle='dfx_particle_lava', scale=1.5}, hud='effect_lava' } },
-    { id='bape', label='Bape', weapon='WEAPON_REVOLVER', model='revolver_bape', comp='COMPONENT_REVOLVER_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-    { id='virex', label='Virex', weapon='WEAPON_REVOLVER', model='wm_virex_gun', comp='COMPONENT_REVOLVER_VIREX',
-      fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
-    { id='chromeace_pink', label='ChromeAce Pink', weapon='WEAPON_REVOLVER', model='things_chromeace_revolver_pink', comp='COMPONENT_REVOLVER_CHROMEACE_PINK',
-      fx = { kill={dict='things_chromeace_pink', particle='things_chromeace_pink', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_pink_screen' } },
-    { id='chromeace_silver', label='ChromeAce Silver', weapon='WEAPON_REVOLVER', model='things_chromeace_revolver_sliver', comp='COMPONENT_REVOLVER_CHROMEACE_SILVER',
-      fx = { kill={dict='things_chromeace_silver', particle='things_chromeace_silver', scale=0.2}, sound='things_chromeace_sound.mp3', hud='things_chromeace_silver_screen' } },
-    { id='baldwin', label='Baldwin', weapon='WEAPON_REVOLVER', model='wm_baldwin_gun', comp='COMPONENT_REVOLVER_BALDWIN',
-      fx = { hold={dict='handbaldwin', particle='handbaldwin', bone=57005, scale=0.10}, sound='baldwin.mp3', hud='baldwin' } },
-
-    -- ─── 8. ไม้เบสบอล (WEAPON_BAT) ───
-    { id='bape', label='Bape', weapon='WEAPON_BAT', model='bat_bape', comp='COMPONENT_BAT_BAPE',
-      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } },
-    { id='virex', label='Virex', weapon='WEAPON_BAT', model='wm_virex_bat', comp='COMPONENT_BAT_VIREX',
-      fx = { hold={dict='wishme_virex', particle='wishme_virex', bone=57005, scale=0.2}, kill={dict='wishme_virex', particle='wishme_virex', scale=1.5}, sound='virex.mp3', hud='virex' } },
+      fx = { hold={dict='withme_bape', particle='withme_bape_hfx', bone=57005, scale=0.15}, kill={dict='withme_bape', particle='withme_bape_cri', scale=0.2}, sound='bapebape.mp3', hud='bapee' } }
 }
 
 -- สร้างตาราง Model Hashes ทั้งหมดของเซิร์ฟเวอร์ เพื่อตรวจจับและกวาดล้างขยะ Entity
@@ -299,7 +140,7 @@ for _, s in ipairs(SERVER_SKINS_DB) do
 end
 
 -- ====================================================================================
--- 4. STATE & ENTITY LIFECYCLE MANAGEMENT (แก้บัคไม้ไม่หาย 100%)
+-- 4. STATE & ENTITY LIFECYCLE MANAGEMENT (แก้บัคไม้ไม่หาย / หลุดมือ 100%)
 -- ====================================================================================
 local activeSkin = nil
 local activePropEntity = nil
@@ -331,7 +172,7 @@ local function SafeDeleteProp(entity)
     end)
 end
 
--- ระบบ Garbage Collection สแกนตัวละคร กวาดล้างไม้หรือของที่ติดค้างอยู่ (แก้บัค Photo 2)
+-- ระบบ Garbage Collection สแกนตัวละคร กวาดล้างไม้หรือของที่ติดค้างอยู่
 local function CleanupAttachedSkinProps(ped)
     if not ped or ped == 0 or not DoesEntityExist(ped) then return end
     if activePropEntity and DoesEntityExist(activePropEntity) then
@@ -492,15 +333,15 @@ CreateThread(function()
             if baseKey and activeSkin and (activeSkin.weapon == baseKey) then
                 local modelHash = GetHashKey(activeSkin.model)
 
-                if IsModelInCdimage(modelHash) then
-                    -- 1. บังคับซ่อนไม้เดิม 0ms ไร้การกระพริบ
-                    local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
-                    if wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity) then
-                        SetEntityVisible(wepEntity, false, false)
-                        SetEntityAlpha(wepEntity, 0, false)
-                    end
+                -- 1. บังคับซ่อนไม้เดิมทุกเฟรม 0ms ไร้การกระพริบ (ทำก่อนสร้าง prop เสมอ)
+                local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
+                if wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity) then
+                    SetEntityVisible(wepEntity, false, false)
+                    SetEntityAlpha(wepEntity, 0, false)
+                end
 
-                    -- 2. สร้าง Prop สกินแบบ Local (false, false ป้องกันปัญหาเครือข่ายลบไม่ไป)
+                if IsModelInCdimage(modelHash) then
+                    -- 2. สร้าง Prop สกิน (สร้างครั้งเดียว attach กับ weapon object)
                     if not activePropEntity or not DoesEntityExist(activePropEntity) then
                         RequestModel(modelHash)
                         local tries = 0
@@ -510,26 +351,38 @@ CreateThread(function()
                         end
 
                         if HasModelLoaded(modelHash) then
+                            -- รอ weapon object พร้อม
+                            local wObj = nil
+                            for i = 1, 30 do
+                                wObj = GetCurrentPedWeaponEntityIndex(ped)
+                                if wObj and wObj ~= 0 and DoesEntityExist(wObj) then break end
+                                Wait(50)
+                            end
+
                             local coords = GetEntityCoords(ped)
-                            activePropEntity = CreateObject(modelHash, coords.x, coords.y, coords.z, false, false, false)
+                            activePropEntity = CreateObject(modelHash, coords.x, coords.y, coords.z - 50.0, false, false, false)
                             if activePropEntity and DoesEntityExist(activePropEntity) then
                                 SetEntityCollision(activePropEntity, false, false)
-                                DisableCamCollisionForObject(activePropEntity)
-                                SetEntityVisible(activePropEntity, true, true)
+                                pcall(DisableCamCollisionForObject, activePropEntity)
 
-                                local att = ATTACH_CONFIG[baseKey] or ATTACH_CONFIG['WEAPON_POOLCUE']
-                                local boneIndex = GetPedBoneIndex(ped, att.Bone or 28422)
-                                if boneIndex == -1 then boneIndex = GetPedBoneIndex(ped, 28422) end
-
-                                -- ล็อคพิกัดด้วย Rotation Order = 0 (XYZ) มาตรฐาน ไม่บิดขวางเอว 100%
-                                AttachEntityToEntity(
-                                    activePropEntity, ped, boneIndex,
-                                    att.Pos.x, att.Pos.y, att.Pos.z,
-                                    att.Rot.x, att.Rot.y, att.Rot.z,
-                                    true, true, false, false,
-                                    att.RotOrder or 0,
-                                    true
-                                )
+                                if wObj and wObj ~= 0 and DoesEntityExist(wObj) then
+                                    AttachEntityToEntity(
+                                        activePropEntity, wObj, 0,
+                                        0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                                        false, true, false, true, 1, true
+                                    )
+                                else
+                                    local att = ATTACH_CONFIG[baseKey] or ATTACH_CONFIG['WEAPON_POOLCUE']
+                                    local boneIndex = GetPedBoneIndex(ped, att.Bone or 28422)
+                                    if boneIndex == -1 then boneIndex = GetPedBoneIndex(ped, 28422) end
+                                    AttachEntityToEntity(
+                                        activePropEntity, ped, boneIndex,
+                                        att.Pos.x, att.Pos.y, att.Pos.z,
+                                        att.Rot.x, att.Rot.y, att.Rot.z,
+                                        true, true, false, false,
+                                        att.RotOrder or 0, true
+                                    )
+                                end
                                 SetModelAsNoLongerNeeded(modelHash)
                             end
                         end
@@ -675,13 +528,7 @@ end
 -- ── คำสั่ง /home [ชื่อสกิน] ──
 RegisterCommand('home', function(_, args)
     local skinInput = args[1]
-
-    if not skinInput or skinInput == '' then
-        print('^3[W-SKIN]^7 วิธีใช้: ^2/home [ชื่อสกิน]^7 (เช่น /home bape, /home carbon, /home lava, /home halloween)')
-        print('^3[W-SKIN]^7 ดูรายชื่อสกินทั้งหมด: พิมพ์ ^2/homelist^7')
-        print('^3[W-SKIN]^7 ถอดสกิน: พิมพ์ ^1/homeoff^7')
-        return
-    end
+    if not skinInput or skinInput == '' then return end
 
     local q = string.lower(skinInput)
     if q == 'off' or q == 'none' or q == '0' or q == 'clear' then
@@ -697,26 +544,17 @@ RegisterCommand('home', function(_, args)
     local ped = PlayerPedId()
     local curWp = GetSelectedPedWeapon(ped)
     local baseKey = GetWeaponBaseKey(curWp)
-
-    if not baseKey then
-        print('^1[W-SKIN]^7 กรุณาถืออาวุธในมือก่อนใส่สกิน (ไม้พูล, มีด, ขวด, กริช, สปาต้า, สนับมือ, ลูกโม่, ไม้เบส)')
-        return
-    end
+    if not baseKey then return end
 
     local skinEntry = FindSkin(q, baseKey)
-
     if skinEntry then
         ApplyServerSkin(skinEntry)
-        print(string.format('^2[W-SKIN]^7 สวมใส่สกิน: ^6%s^7 (%s) สำหรับ ^3%s^7 สำเร็จ!', skinEntry.id, skinEntry.label, baseKey))
-    else
-        print(string.format('^1[W-SKIN]^7 ไม่พบสกิน \'%s\' สำหรับ %s (พิมพ์ /homelist เพื่อดูรายชื่อสกินของเซิร์ฟนี้)', skinInput, baseKey))
     end
 end, false)
 
 -- ── คำสั่ง /homeoff ──
 RegisterCommand('homeoff', function()
     ApplyServerSkin(nil)
-    print('^1[W-SKIN]^7 ถอดสกินเรียบร้อยแล้ว (ไม้เดิมกลับคืนปกติ)')
 end, false)
 
 -- ── คำสั่ง /homelist ──
@@ -736,16 +574,20 @@ RegisterCommand('homelist', function()
             end
         end
     else
-        print('^3--- รายชื่อสกินทั้งหมดแยกตามประเภทอาวุธ ---^7')
+        print('^3--- รายชื่อสกินทั้งหมด (Poolcue & Bottle เท่านั้น) ---^7')
         local grouped = {}
         for _, s in ipairs(SERVER_SKINS_DB) do
             grouped[s.weapon] = grouped[s.weapon] or {}
             table.insert(grouped[s.weapon], s)
         end
-        local order = { 'WEAPON_POOLCUE', 'WEAPON_KNIFE', 'WEAPON_BOTTLE', 'WEAPON_DAGGER', 'WEAPON_MACHETE', 'WEAPON_KNUCKLE', 'WEAPON_REVOLVER', 'WEAPON_BAT' }
+        local order = { 'WEAPON_POOLCUE', 'WEAPON_BOTTLE' }
+        local labels = {
+            ['WEAPON_POOLCUE'] = 'ไม้พูล (Pool Cue)',
+            ['WEAPON_BOTTLE'] = 'ขวด (Bottle)'
+        }
         for _, wKey in ipairs(order) do
             if grouped[wKey] then
-                print(string.format('^3>> %s:^7', wKey))
+                print(string.format('^3>> %s [%s]:^7', labels[wKey] or wKey, wKey))
                 local line = '   '
                 for idx, s in ipairs(grouped[wKey]) do
                     line = line .. string.format('^6%s^7, ', s.id)
