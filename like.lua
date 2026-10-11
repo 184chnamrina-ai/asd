@@ -267,6 +267,14 @@ for _, s in ipairs(SkinDB) do
     allCompHashes[GetHashKey(s.comp)] = true
 end
 
+local BASE_WEAPON_HASH = {
+    WEAPON_POOLCUE = GetHashKey('WEAPON_POOLCUE'),
+}
+
+local function getBaseHash(weaponKey)
+    return BASE_WEAPON_HASH[weaponKey] or GetHashKey(weaponKey)
+end
+
 local function findSkinEntry(query, weaponKey)
     if not query or query == '' then return nil end
     local q = string.lower(query)
@@ -368,15 +376,6 @@ end
 -- ============================================================================
 -- 6. APPLY / REMOVE
 -- ============================================================================
--- Components ลงทะเบียนใน meta ของ base weapon เท่านั้น (ไม่ใช่ variant)
-local BASE_WEAPON_HASH = {
-    WEAPON_POOLCUE = GetHashKey('WEAPON_POOLCUE'),
-}
-
-local function getBaseHash(weaponKey)
-    return BASE_WEAPON_HASH[weaponKey] or GetHashKey(weaponKey)
-end
-
 local function applySkin(entry)
     local ped = PlayerPedId()
     local cur = GetSelectedPedWeapon(ped)
