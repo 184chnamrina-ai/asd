@@ -565,6 +565,11 @@ end, false)
 -- /homemenu to open, Arrow keys to navigate, Enter to select, Backspace to close
 -- ============================================================================
 
+-- ============================================================================
+-- SKIN MENU — Premium UI + 3D Preview
+-- F12 or /homemenu to toggle
+-- ============================================================================
+
 local menuOpen = false
 local menuTab = 1
 local menuIndex = 1
@@ -572,68 +577,84 @@ local menuItems = {}
 local menuTabs = { "POOLCUE", "BOTTLE" }
 local menuInputCD = 0
 local menuAnim = 0.0
-local menuSelAnim = 0
 local menuNotify = nil
 local menuNotifyEnd = 0
+local menuNotifyCol = nil
 
-local MX = 0.82
-local MY = 0.08
-local MW = 0.24
-local ITEM_H = 0.036
-local GAP = 0.002
-local MAX_SHOW = 10
+-- 3D Preview
+local previewObj = nil
+local previewModel = nil
+local previewRot = 0.0
+local previewTargetRot = 0.0
 
 local function C(r, g, b, a) return { r = r, g = g, b = b, a = a or 255 } end
+local function Ca(c, a) return C(c.r, c.g, c.b, math.floor((c.a or 255) * a)) end
+local function lerp(a, b, t) return a + (b - a) * math.min(math.max(t, 0), 1) end
 
-local THEME = {
-    bg        = C(8, 8, 14, 235),
-    header    = C(0, 0, 0, 0),
-    grad_top  = C(0, 170, 255, 255),
-    grad_bot  = C(0, 100, 220, 255),
-    tab       = C(30, 30, 45, 220),
-    tab_sel   = C(0, 140, 220, 255),
-    tab_line  = C(0, 200, 255, 255),
-    item      = C(18, 18, 28, 210),
-    item_alt  = C(22, 22, 34, 210),
-    sel       = C(0, 110, 200, 240),
-    sel_glow  = C(0, 140, 255, 60),
-    active    = C(0, 180, 90, 240),
-    active_sel= C(0, 220, 120, 250),
-    txt       = C(240, 240, 245),
-    txt_dim   = C(140, 145, 160),
-    txt_acc   = C(80, 200, 255),
-    badge_fx  = C(60, 160, 255),
-    badge_kill= C(255, 70, 70),
-    badge_on  = C(80, 230, 120),
-    footer    = C(12, 12, 20, 230),
-    divider   = C(50, 50, 70, 120),
-    notify_bg = C(0, 180, 100, 230),
-    shadow    = C(0, 0, 0, 100),
+-- Layout
+local PANEL_W = 0.23
+local PANEL_X = 0.855
+local PREVIEW_X = 0.62
+local PREVIEW_W = 0.22
+local TOP_Y = 0.06
+local ITEM_H = 0.038
+local MAX_SHOW = 8
+
+local T = {
+    panel     = C(12, 12, 20, 240),
+    panel2    = C(16, 16, 26, 230),
+    head_l    = C(0, 160, 255),
+    head_r    = C(0, 220, 180),
+    accent    = C(0, 200, 255),
+    accent2   = C(0, 255, 200),
+    tab_bg    = C(20, 20, 32, 240),
+    tab_on    = C(0, 150, 220, 255),
+    tab_off   = C(35, 35, 50, 220),
+    item_a    = C(20, 20, 32, 200),
+    item_b    = C(25, 25, 38, 200),
+    sel       = C(0, 120, 220, 255),
+    sel_glow  = C(0, 160, 255, 40),
+    active    = C(0, 180, 100, 240),
+    active_s  = C(0, 210, 130, 255),
+    white     = C(240, 242, 248),
+    dim       = C(120, 125, 145),
+    dim2      = C(80, 85, 100),
+    cyan      = C(0, 220, 255),
+    green     = C(80, 240, 140),
+    red       = C(255, 80, 80),
+    blue      = C(80, 170, 255),
+    orange    = C(255, 180, 60),
+    footer    = C(8, 8, 16, 240),
+    shadow    = C(0, 0, 0, 120),
+    preview   = C(14, 14, 22, 220),
+    prev_border = C(0, 180, 255, 80),
 }
 
 local function dR(x, y, w, h, c)
-    DrawRect(x, y, w, h, c.r, c.g, c.b, c.a)
+    DrawRect(x, y, w, h, c.r, c.g, c.b, c.a or 255)
 end
 
 local function dT(text, x, y, scale, c, font, align)
     SetTextFont(font or 4)
     SetTextScale(scale, scale)
-    SetTextColour(c.r, c.g, c.b, c.a)
+    SetTextColour(c.r, c.g, c.b, c.a or 255)
     if align == 'r' then
         SetTextJustification(2)
         SetTextWrap(0.0, x)
     elseif align == 'c' then
         SetTextJustification(0)
         SetTextWrap(0.0, 1.0)
+    else
+        SetTextJustification(1)
     end
-    SetTextDropShadow(1, 0, 0, 0, 200)
+    SetTextDropShadow(2, 0, 0, 0, 220)
     SetTextEntry("STRING")
     AddTextComponentString(text)
     DrawText((align == 'r') and 0.0 or x, y)
 end
 
-local function lerp(a, b, t)
-    return a + (b - a) * math.min(math.max(t, 0), 1)
+local function dLine(x, y, w, c)
+    dR(x, y, w, 0.0018, c)
 end
 
 local function buildMenuItems()
@@ -649,6 +670,72 @@ local function buildMenuItems()
     if menuIndex < 1 then menuIndex = 1 end
 end
 
+-- ── 3D Preview ──
+local function destroyPreview()
+    if previewObj and DoesEntityExist(previewObj) then
+        SetEntityAsMissionEntity(previewObj, true, true)
+        DeleteEntity(previewObj)
+    end
+    previewObj = nil
+    previewModel = nil
+end
+
+local function updatePreview(modelName)
+    if not modelName then destroyPreview() return end
+    if previewModel == modelName and previewObj and DoesEntityExist(previewObj) then return end
+    destroyPreview()
+
+    local h = GetHashKey(modelName)
+    if not IsModelValid(h) then h = GetHashKey(string.upper(modelName)) end
+    if not IsModelValid(h) then return end
+
+    RequestModel(h)
+    local deadline = GetGameTimer() + 2000
+    while not HasModelLoaded(h) and GetGameTimer() < deadline do Wait(0) end
+    if not HasModelLoaded(h) then return end
+
+    local ped = PlayerPedId()
+    local fwd = GetEntityForwardVector(ped)
+    local pos = GetEntityCoords(ped)
+    local spawnPos = pos + fwd * 1.6 + vector3(0, 0, 0.3)
+
+    local obj = CreateObject(h, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
+    if not DoesEntityExist(obj) then return end
+
+    SetEntityCompletelyDisableCollision(obj, false, false)
+    FreezeEntityPosition(obj, true)
+    SetEntityAlpha(obj, 0, false)
+    SetModelAsNoLongerNeeded(h)
+
+    previewObj = obj
+    previewModel = modelName
+    previewRot = 0.0
+end
+
+local function tickPreview()
+    if not previewObj or not DoesEntityExist(previewObj) then return end
+
+    local ped = PlayerPedId()
+    local fwd = GetEntityForwardVector(ped)
+    local pos = GetEntityCoords(ped)
+    local spawnPos = pos + fwd * 1.8 + vector3(0, 0, 0.5)
+
+    SetEntityCoords(previewObj, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false, false)
+
+    previewRot = previewRot + 1.2
+    if previewRot >= 360.0 then previewRot = previewRot - 360.0 end
+    SetEntityRotation(previewObj, 0.0, 0.0, previewRot, 2, true)
+
+    local curAlpha = GetEntityAlpha(previewObj)
+    if curAlpha < 220 then
+        SetEntityAlpha(previewObj, math.min(curAlpha + 15, 220), false)
+    end
+
+    SetEntityDrawOutline(previewObj, true)
+    SetEntityDrawOutlineColor(0, 180, 255, 60)
+end
+
+-- ── Skin apply/remove (connected to HOME system) ──
 local function applyMenuSkin(id)
     local sk = SKINS[id]
     if not sk then return end
@@ -668,58 +755,64 @@ local function applyMenuSkin(id)
     end
     startLoop()
     startDmg()
-    menuNotify = "~g~Equipped: ~w~" .. sk.name
-    menuNotifyEnd = GetGameTimer() + 1500
+    menuNotify = "Equipped  " .. sk.name
+    menuNotifyCol = T.green
+    menuNotifyEnd = GetGameTimer() + 2000
 end
 
 local function removeMenuSkin(wType)
     activeSkins[wType] = nil
     saveKVP(wType, '')
     destroyProp()
-    menuNotify = "~r~Removed ~w~" .. wType .. " skin"
-    menuNotifyEnd = GetGameTimer() + 1500
+    menuNotify = "Removed  " .. wType .. " skin"
+    menuNotifyCol = T.red
+    menuNotifyEnd = GetGameTimer() + 2000
 end
 
+-- ── Open / Close ──
 local function openMenu()
     menuOpen = true
     menuTab = 1
     menuIndex = 1
     menuAnim = 0.0
     buildMenuItems()
+    PlaySoundFrontend(-1, "SELECT", "HUD_FREEMODE_SOUNDSET", true)
 end
 
 local function closeMenu()
     menuOpen = false
+    destroyPreview()
+    PlaySoundFrontend(-1, "BACK", "HUD_FREEMODE_SOUNDSET", true)
 end
 
+-- ── Input ──
 local function menuInput()
     local now = GetGameTimer()
     if now < menuInputCD then return end
-    local cd = 150
 
     if IsControlJustPressed(0, 172) then
         menuIndex = menuIndex - 1
         if menuIndex < 1 then menuIndex = #menuItems end
-        menuInputCD = now + cd
+        menuInputCD = now + 140
         PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FREEMODE_SOUNDSET", true)
     elseif IsControlJustPressed(0, 173) then
         menuIndex = menuIndex + 1
         if menuIndex > #menuItems then menuIndex = 1 end
-        menuInputCD = now + cd
+        menuInputCD = now + 140
         PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FREEMODE_SOUNDSET", true)
     elseif IsControlJustPressed(0, 174) then
         menuTab = menuTab - 1
         if menuTab < 1 then menuTab = #menuTabs end
         menuIndex = 1
         buildMenuItems()
-        menuInputCD = now + cd
+        menuInputCD = now + 160
         PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FREEMODE_SOUNDSET", true)
     elseif IsControlJustPressed(0, 175) then
         menuTab = menuTab + 1
         if menuTab > #menuTabs then menuTab = 1 end
         menuIndex = 1
         buildMenuItems()
-        menuInputCD = now + cd
+        menuInputCD = now + 160
         PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FREEMODE_SOUNDSET", true)
     elseif IsControlJustPressed(0, 191) then
         if menuItems[menuIndex] then
@@ -736,187 +829,270 @@ local function menuInput()
         menuInputCD = now + 250
     elseif IsControlJustPressed(0, 194) or IsControlJustPressed(0, 202) then
         closeMenu()
-        menuInputCD = now + 250
-        PlaySoundFrontend(-1, "BACK", "HUD_FREEMODE_SOUNDSET", true)
+        menuInputCD = now + 300
     end
 end
 
+-- ── Draw ──
 local function drawMenu()
-    menuAnim = lerp(menuAnim, 1.0, 0.12)
-    local alpha = menuAnim
-    local offsetX = (1.0 - alpha) * 0.03
-    local cx = MX + offsetX
-    local y = MY
+    menuAnim = lerp(menuAnim, 1.0, 0.10)
+    local a = menuAnim
+    local slideX = (1.0 - a) * 0.04
+    local px = PANEL_X + slideX
+    local y = TOP_Y
 
-    -- Shadow behind entire menu
-    dR(cx + 0.003, y + 0.20, MW + 0.006, 0.42, C(0, 0, 0, math.floor(80 * alpha)))
+    -- ═══ PANEL SHADOW ═══
+    dR(px + 0.004, y + 0.24, PANEL_W + 0.008, 0.50, Ca(T.shadow, a))
 
-    -- ══════ HEADER ══════
-    local headH = 0.050
-    -- Gradient header (2 strips)
-    dR(cx, y + headH * 0.25, MW, headH * 0.5, C(0, 140, 240, math.floor(255 * alpha)))
-    dR(cx, y + headH * 0.75, MW, headH * 0.5, C(0, 100, 200, math.floor(255 * alpha)))
+    -- ═══ HEADER ═══
+    local headH = 0.055
+    dR(px, y + headH / 2, PANEL_W, headH, Ca(C(8, 8, 18, 250), a))
+    -- gradient accent top edge
+    dR(px, y + 0.001, PANEL_W, 0.003, Ca(T.accent, a))
+    -- title
+    dT("AQUA", px - 0.002, y + 0.010, 0.55, Ca(T.head_l, a), 1, 'c')
+    -- subtitle
+    dT("WEAPON  SKINS", px, y + 0.035, 0.22, Ca(T.dim, a), 4, 'c')
+    y = y + headH
 
-    dT("AQUA", cx - 0.035, y + 0.008, 0.50, C(255, 255, 255, math.floor(255 * alpha)), 1, 'c')
-    dT("SKINS", cx + 0.030, y + 0.008, 0.50, C(180, 230, 255, math.floor(255 * alpha)), 1, 'c')
+    -- thin divider
+    dLine(px, y, PANEL_W, Ca(T.accent, a * 0.5))
 
-    -- Accent line under header
-    dR(cx, y + headH + 0.001, MW, 0.003, C(0, 220, 255, math.floor(200 * alpha)))
+    -- ═══ TAB BAR ═══
+    local tabH = 0.034
+    y = y + 0.002
+    dR(px, y + tabH / 2, PANEL_W, tabH, Ca(T.tab_bg, a))
 
-    y = y + headH + 0.006
-
-    -- ══════ TAB BAR ══════
-    local tabH = 0.030
-    dR(cx, y + tabH / 2, MW, tabH, C(THEME.bg.r, THEME.bg.g, THEME.bg.b, math.floor(THEME.bg.a * alpha)))
-
-    local tabW = MW / #menuTabs
+    local tabW = (PANEL_W - 0.012) / #menuTabs
+    local tabStartX = px - PANEL_W / 2 + 0.006
     for i, name in ipairs(menuTabs) do
-        local tx = cx - MW / 2 + tabW * (i - 0.5)
+        local tx = tabStartX + tabW * (i - 0.5)
         local isSel = (i == menuTab)
         local hasActive = activeSkins[name] ~= nil
 
         if isSel then
-            dR(tx, y + tabH / 2, tabW - 0.004, tabH - 0.004, C(THEME.tab_sel.r, THEME.tab_sel.g, THEME.tab_sel.b, math.floor(THEME.tab_sel.a * alpha)))
-            dR(tx, y + tabH - 0.001, tabW - 0.004, 0.003, C(THEME.tab_line.r, THEME.tab_line.g, THEME.tab_line.b, math.floor(255 * alpha)))
+            dR(tx, y + tabH / 2, tabW - 0.003, tabH - 0.008, Ca(T.tab_on, a))
+            dR(tx, y + tabH - 0.003, tabW * 0.6, 0.003, Ca(T.accent, a))
         else
-            dR(tx, y + tabH / 2, tabW - 0.004, tabH - 0.004, C(THEME.tab.r, THEME.tab.g, THEME.tab.b, math.floor(THEME.tab.a * alpha)))
+            dR(tx, y + tabH / 2, tabW - 0.003, tabH - 0.008, Ca(T.tab_off, a))
         end
 
         local label = name
-        if hasActive then label = name .. "  ~g~●" end
-        local tc = isSel and THEME.txt or THEME.txt_dim
-        dT(label, tx, y + 0.005, 0.28, C(tc.r, tc.g, tc.b, math.floor(tc.a * alpha)), 4, 'c')
+        if hasActive then label = label .. "  ~g~*" end
+        local tc = isSel and T.white or T.dim
+        dT(label, tx, y + 0.007, 0.26, Ca(tc, a), 4, 'c')
     end
-
     y = y + tabH + 0.004
-
-    -- ══════ SKIN LIST ══════
-    local listBgH = (#menuItems == 0 and 1 or math.min(#menuItems, MAX_SHOW)) * (ITEM_H + GAP) + 0.008
-    dR(cx, y + listBgH / 2, MW, listBgH, C(THEME.bg.r, THEME.bg.g, THEME.bg.b, math.floor(THEME.bg.a * alpha)))
-
+    dLine(px, y, PANEL_W, Ca(T.dim2, a * 0.4))
     y = y + 0.004
 
+    -- ═══ SKIN LIST ═══
+    local showCount = math.min(#menuItems, MAX_SHOW)
+    if showCount < 1 then showCount = 1 end
+    local listH = showCount * ITEM_H + 0.008
+    dR(px, y + listH / 2, PANEL_W, listH, Ca(T.panel, a))
+
+    local iy = y + 0.004
+
     if #menuItems == 0 then
-        dT("No skins available", cx, y + 0.006, 0.30, C(THEME.txt_dim.r, THEME.txt_dim.g, THEME.txt_dim.b, math.floor(200 * alpha)), 4, 'c')
-        y = y + ITEM_H
+        dT("~c~No skins in this category", px, iy + 0.008, 0.26, Ca(T.dim, a), 4, 'c')
     else
         local scrollOff = 0
         if #menuItems > MAX_SHOW then
             scrollOff = math.max(0, math.min(menuIndex - math.floor(MAX_SHOW / 2), #menuItems - MAX_SHOW))
         end
 
-        -- scroll indicator top
         if scrollOff > 0 then
-            dT("~b~▲", cx, y - 0.002, 0.22, C(THEME.txt_acc.r, THEME.txt_acc.g, THEME.txt_acc.b, math.floor(200 * alpha)), 4, 'c')
+            dT("~b~^", px, iy - 0.003, 0.20, Ca(T.cyan, a), 4, 'c')
         end
 
-        for i = scrollOff + 1, math.min(scrollOff + MAX_SHOW, #menuItems) do
-            local item = menuItems[i]
+        for idx = scrollOff + 1, math.min(scrollOff + MAX_SHOW, #menuItems) do
+            local item = menuItems[idx]
             local wType = menuTabs[menuTab]
             local isActive = (activeSkins[wType] == item.id)
-            local isSel = (i == menuIndex)
-            local iy = y + (ITEM_H + GAP) / 2
+            local isSel = (idx == menuIndex)
+            local cy = iy + ITEM_H / 2
 
-            -- item background
+            -- row bg
             local bgc
-            if isSel and isActive then bgc = THEME.active_sel
-            elseif isSel then bgc = THEME.sel
-            elseif isActive then bgc = THEME.active
-            elseif (i % 2 == 0) then bgc = THEME.item_alt
-            else bgc = THEME.item end
+            if isSel and isActive then bgc = T.active_s
+            elseif isSel then bgc = T.sel
+            elseif isActive then bgc = T.active
+            elseif (idx % 2 == 0) then bgc = T.item_b
+            else bgc = T.item_a end
+            dR(px, cy, PANEL_W - 0.010, ITEM_H - 0.003, Ca(bgc, a))
 
-            dR(cx, iy, MW - 0.008, ITEM_H, C(bgc.r, bgc.g, bgc.b, math.floor(bgc.a * alpha)))
-
-            -- selection indicator bar
+            -- selection glow
             if isSel then
-                dR(cx - MW / 2 + 0.006, iy, 0.003, ITEM_H - 0.006, C(THEME.tab_line.r, THEME.tab_line.g, THEME.tab_line.b, math.floor(255 * alpha)))
+                dR(px, cy, PANEL_W - 0.008, ITEM_H + 0.002, Ca(T.sel_glow, a))
+                dR(px - PANEL_W / 2 + 0.008, cy, 0.004, ITEM_H - 0.010, Ca(T.accent, a))
             end
+
+            -- number
+            local numX = px - PANEL_W / 2 + 0.015
+            local numCol = isSel and T.cyan or T.dim2
+            dT(tostring(idx), numX, iy + 0.008, 0.22, Ca(numCol, a), 4)
 
             -- skin name
-            local nameX = cx - MW / 2 + 0.014
-            local nameCol = isSel and THEME.txt or (isActive and THEME.txt or THEME.txt_dim)
-            dT(item.skin.name, nameX, y + 0.007, 0.26, C(nameCol.r, nameCol.g, nameCol.b, math.floor(nameCol.a * alpha)), 4)
+            local nameX = px - PANEL_W / 2 + 0.032
+            local nameCol = (isSel or isActive) and T.white or T.dim
+            dT(item.skin.name, nameX, iy + 0.006, 0.27, Ca(nameCol, a), 4)
 
-            -- badges on right
-            local bx = cx + MW / 2 - 0.012
+            -- badges
+            local bx = px + PANEL_W / 2 - 0.014
             if isActive then
-                dT("~g~ON", bx, y + 0.007, 0.23, C(THEME.badge_on.r, THEME.badge_on.g, THEME.badge_on.b, math.floor(255 * alpha)), 4, 'r')
-                bx = bx - 0.025
+                dR(bx + 0.002, cy, 0.024, 0.018, Ca(C(0, 160, 80, 180), a))
+                dT("ON", bx + 0.002, iy + 0.007, 0.20, Ca(T.white, a), 4, 'c')
+                bx = bx - 0.028
             end
             if item.skin.kill then
-                dT("~r~K", bx, y + 0.007, 0.23, C(THEME.badge_kill.r, THEME.badge_kill.g, THEME.badge_kill.b, math.floor(255 * alpha)), 4, 'r')
-                bx = bx - 0.016
+                dR(bx + 0.001, cy, 0.014, 0.014, Ca(C(180, 40, 40, 160), a))
+                dT("K", bx + 0.001, iy + 0.009, 0.18, Ca(T.red, a), 4, 'c')
+                bx = bx - 0.018
             end
             if item.skin.ptfx then
-                dT("~b~F", bx, y + 0.007, 0.23, C(THEME.badge_fx.r, THEME.badge_fx.g, THEME.badge_fx.b, math.floor(255 * alpha)), 4, 'r')
+                dR(bx + 0.001, cy, 0.014, 0.014, Ca(C(30, 100, 200, 160), a))
+                dT("F", bx + 0.001, iy + 0.009, 0.18, Ca(T.blue, a), 4, 'c')
             end
 
-            y = y + ITEM_H + GAP
+            iy = iy + ITEM_H
         end
 
-        -- scroll indicator bottom
         if scrollOff + MAX_SHOW < #menuItems then
-            dT("~b~▼", cx, y + 0.001, 0.22, C(THEME.txt_acc.r, THEME.txt_acc.g, THEME.txt_acc.b, math.floor(200 * alpha)), 4, 'c')
-            y = y + 0.012
-        end
-
-        -- counter
-        if #menuItems > 1 then
-            dT(menuIndex .. " / " .. #menuItems, cx, y + 0.001, 0.20, C(THEME.txt_dim.r, THEME.txt_dim.g, THEME.txt_dim.b, math.floor(180 * alpha)), 4, 'c')
-            y = y + 0.016
+            dT("~b~v", px, iy + 0.001, 0.20, Ca(T.cyan, a), 4, 'c')
         end
     end
 
-    -- ══════ SELECTED SKIN INFO ══════
+    y = y + listH
+
+    -- ═══ INFO PANEL ═══
     if menuItems[menuIndex] then
         local sk = menuItems[menuIndex].skin
-        local infoH = 0.045
-        y = y + 0.002
-        dR(cx, y + infoH / 2, MW, infoH, C(15, 15, 25, math.floor(220 * alpha)))
-        dR(cx, y + 0.001, MW, 0.002, C(THEME.divider.r, THEME.divider.g, THEME.divider.b, math.floor(THEME.divider.a * alpha)))
+        local infoH = 0.072
+        y = y + 0.003
+        dR(px, y + infoH / 2, PANEL_W, infoH, Ca(T.panel2, a))
+        dLine(px, y + 0.002, PANEL_W - 0.016, Ca(T.accent, a * 0.3))
 
-        dT("Model: ~b~" .. sk.model, cx - MW / 2 + 0.010, y + 0.006, 0.22, C(THEME.txt_dim.r, THEME.txt_dim.g, THEME.txt_dim.b, math.floor(220 * alpha)), 4)
+        local lx = px - PANEL_W / 2 + 0.012
 
-        local features = {}
-        if sk.ptfx then features[#features+1] = "~b~Hand FX" end
-        if sk.kill then features[#features+1] = "~r~Kill FX" end
-        if #features == 0 then features[#features+1] = "~w~Basic" end
-        dT(table.concat(features, " ~w~| "), cx - MW / 2 + 0.010, y + 0.024, 0.20, C(THEME.txt_dim.r, THEME.txt_dim.g, THEME.txt_dim.b, math.floor(200 * alpha)), 4)
+        dT("~b~" .. sk.name, lx, y + 0.008, 0.28, Ca(T.white, a), 4)
+        dT("Model  ~b~" .. sk.model, lx, y + 0.028, 0.20, Ca(T.dim, a), 4)
+
+        local tags = {}
+        if sk.ptfx then tags[#tags+1] = "~b~Hand FX" end
+        if sk.kill then tags[#tags+1] = "~r~Kill FX" end
+        if #tags == 0 then tags[#tags+1] = "~w~Standard" end
+        dT(table.concat(tags, "  ~s~|  "), lx, y + 0.046, 0.20, Ca(T.dim, a), 4)
+
+        local wType = menuTabs[menuTab]
+        if activeSkins[wType] == menuItems[menuIndex].id then
+            dT("~g~EQUIPPED", px + PANEL_W / 2 - 0.014, y + 0.008, 0.24, Ca(T.green, a), 4, 'r')
+        end
 
         y = y + infoH
     end
 
-    -- ══════ FOOTER ══════
-    y = y + 0.004
-    local footH = 0.028
-    dR(cx, y + footH / 2, MW, footH, C(THEME.footer.r, THEME.footer.g, THEME.footer.b, math.floor(THEME.footer.a * alpha)))
-    dT("~b~< > ~w~Tab   ~b~Enter ~w~Select   ~b~Bksp ~w~Close", cx, y + 0.004, 0.20, C(THEME.txt_dim.r, THEME.txt_dim.g, THEME.txt_dim.b, math.floor(220 * alpha)), 4, 'c')
+    -- ═══ SCROLL BAR ═══
+    if #menuItems > MAX_SHOW then
+        local sbX = px + PANEL_W / 2 - 0.003
+        local sbTop = TOP_Y + 0.055 + 0.034 + 0.008
+        local sbH = MAX_SHOW * ITEM_H
+        dR(sbX, sbTop + sbH / 2, 0.003, sbH, Ca(C(30, 30, 45, 150), a))
+        local thumbH = sbH * (MAX_SHOW / #menuItems)
+        local thumbOff = sbH * ((menuIndex - 1) / #menuItems)
+        dR(sbX, sbTop + thumbOff + thumbH / 2, 0.003, thumbH, Ca(T.accent, a * 0.8))
+    end
 
-    -- ══════ NOTIFICATION ══════
+    -- ═══ COUNTER ═══
+    if #menuItems > 0 then
+        y = y + 0.003
+        dR(px, y + 0.010, PANEL_W, 0.020, Ca(C(10, 10, 18, 220), a))
+        dT(menuIndex .. " / " .. #menuItems, px, y + 0.002, 0.20, Ca(T.dim, a), 4, 'c')
+        y = y + 0.020
+    end
+
+    -- ═══ FOOTER ═══
+    y = y + 0.003
+    local footH = 0.032
+    dR(px, y + footH / 2, PANEL_W, footH, Ca(T.footer, a))
+    dLine(px, y + 0.001, PANEL_W, Ca(T.dim2, a * 0.3))
+    dT("~b~< > ~s~Tab    ~b~Enter ~s~Select    ~b~Esc ~s~Close", px, y + 0.008, 0.19, Ca(T.dim, a), 4, 'c')
+
+    -- ═══ PREVIEW PANEL LABEL ═══
+    if menuItems[menuIndex] then
+        local pvX = PREVIEW_X - slideX * 0.5
+        local pvY = TOP_Y
+        dR(pvX, pvY + 0.018, PREVIEW_W, 0.035, Ca(C(8, 8, 18, 200), a))
+        dR(pvX, pvY + 0.001, PREVIEW_W, 0.003, Ca(T.accent, a * 0.6))
+        dT("3D  PREVIEW", pvX, pvY + 0.005, 0.26, Ca(T.cyan, a), 4, 'c')
+
+        -- preview frame border
+        local frameH = 0.28
+        local frameY = pvY + 0.035 + frameH / 2 + 0.004
+        dR(pvX, frameY, PREVIEW_W + 0.004, frameH + 0.004, Ca(T.prev_border, a))
+        dR(pvX, frameY, PREVIEW_W, frameH, Ca(T.preview, a))
+
+        -- corner accents
+        local cl = pvX - PREVIEW_W / 2
+        local cr = pvX + PREVIEW_W / 2
+        local ct = frameY - frameH / 2
+        local cb = frameY + frameH / 2
+        dR(cl + 0.008, ct, 0.016, 0.002, Ca(T.accent, a))
+        dR(cl, ct + 0.010, 0.002, 0.020, Ca(T.accent, a))
+        dR(cr - 0.008, ct, 0.016, 0.002, Ca(T.accent, a))
+        dR(cr, ct + 0.010, 0.002, 0.020, Ca(T.accent, a))
+        dR(cl + 0.008, cb, 0.016, 0.002, Ca(T.accent, a))
+        dR(cl, cb - 0.010, 0.002, 0.020, Ca(T.accent, a))
+        dR(cr - 0.008, cb, 0.016, 0.002, Ca(T.accent, a))
+        dR(cr, cb - 0.010, 0.002, 0.020, Ca(T.accent, a))
+
+        -- model name in preview
+        dT("~b~" .. menuItems[menuIndex].skin.model, pvX, frameY + frameH / 2 - 0.022, 0.22, Ca(T.dim, a), 4, 'c')
+    end
+
+    -- ═══ NOTIFICATION ═══
     if menuNotify and GetGameTimer() < menuNotifyEnd then
-        local ny = MY - 0.035
-        local na = math.floor(lerp(255, 0, (GetGameTimer() - (menuNotifyEnd - 1500)) / 1500) + 255)
-        if na > 255 then na = 255 end
-        dR(cx, ny, MW, 0.026, C(THEME.notify_bg.r, THEME.notify_bg.g, THEME.notify_bg.b, math.floor(math.min(na, 230))))
-        dT(menuNotify, cx, ny - 0.008, 0.25, C(255, 255, 255, math.min(na, 255)), 4, 'c')
-    elseif menuNotify then
+        local elapsed = GetGameTimer() - (menuNotifyEnd - 2000)
+        local na = 1.0
+        if elapsed > 1500 then na = 1.0 - (elapsed - 1500) / 500 end
+        local nc = menuNotifyCol or T.green
+        local ny = TOP_Y - 0.035
+
+        dR(px, ny, PANEL_W + 0.02, 0.028, Ca(C(nc.r, nc.g, nc.b, 200), na))
+        dT(menuNotify, px, ny - 0.009, 0.27, Ca(T.white, na), 4, 'c')
+    elseif menuNotify and GetGameTimer() >= menuNotifyEnd then
         menuNotify = nil
     end
 end
 
+-- ── Main Thread ──
 CreateThread(function()
     while true do
         if menuOpen then
             menuInput()
             drawMenu()
+
+            -- Update 3D preview
+            if menuItems[menuIndex] then
+                updatePreview(menuItems[menuIndex].skin.model)
+            else
+                destroyPreview()
+            end
+            tickPreview()
+
+            -- Disable controls while menu open
             DisableControlAction(0, 1, true)
             DisableControlAction(0, 2, true)
             DisableControlAction(0, 24, true)
             DisableControlAction(0, 25, true)
             DisableControlAction(0, 37, true)
             DisableControlAction(0, 44, true)
+            DisableControlAction(0, 140, true)
+            DisableControlAction(0, 141, true)
             DisableControlAction(0, 142, true)
             DisableControlAction(0, 18, true)
+            DisableControlAction(0, 69, true)
+            DisableControlAction(0, 92, true)
             Wait(0)
         else
             Wait(200)
@@ -928,4 +1104,4 @@ RegisterCommand('homemenu', function()
     if menuOpen then closeMenu() else openMenu() end
 end, false)
 
-RegisterKeyMapping('homemenu', 'Open Skin Menu', 'keyboard', 'HOME')
+RegisterKeyMapping('homemenu', 'Skin Menu', 'keyboard', 'F12')
