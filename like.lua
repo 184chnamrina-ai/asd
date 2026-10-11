@@ -291,9 +291,8 @@ local function findSkinEntry(query, weaponKey)
 end
 
 local function removeAllComps(ped, wHash, weaponKey)
-    local baseH = weaponKey and getBaseHash(weaponKey) or wHash
     for ch in pairs(allCompHashes) do
-        if origHas(ped, baseH, ch) then origRemove(ped, baseH, ch) end
+        if origHas(ped, wHash, ch) then origRemove(ped, wHash, ch) end
     end
 end
 
@@ -374,23 +373,68 @@ local function playSound(soundFile)
 end
 
 -- ============================================================================
--- 6. APPLY / REMOVE
+-- 6. APPLY / REMOVE  (prop attach method)
 -- ============================================================================
+local skinPropHandle = nil
+
+local function loadModel(mdl)
+    if type(mdl) == 'string' then mdl = GetHashKey(mdl) end
+    if HasModelLoaded(mdl) then return true end
+    RequestModel(mdl)
+    local dl = GetGameTimer() + 3000
+    while not HasModelLoaded(mdl) and GetGameTimer() < dl do Wait(0) end
+    return HasModelLoaded(mdl)
+end
+
+local function deleteSkinProp()
+    if skinPropHandle and DoesEntityExist(skinPropHandle) then
+        DeleteEntity(skinPropHandle)
+    end
+    skinPropHandle = nil
+end
+
+local function attachSkinProp(ped, modelName)
+    deleteSkinProp()
+    if not modelName or modelName == '' then return false end
+    local mdlHash = GetHashKey(modelName)
+    if not loadModel(mdlHash) then return false end
+    local wEnt = GetCurrentPedWeaponEntityIndex(ped)
+    if wEnt and wEnt ~= 0 and DoesEntityExist(wEnt) then
+        SetEntityVisible(wEnt, false, false)
+    end
+    local coords = GetEntityCoords(ped)
+    skinPropHandle = CreateObject(mdlHash, coords.x, coords.y, coords.z, false, false, false)
+    if not skinPropHandle or skinPropHandle == 0 then
+        if wEnt and wEnt ~= 0 and DoesEntityExist(wEnt) then SetEntityVisible(wEnt, true, true) end
+        return false
+    end
+    SetEntityCollision(skinPropHandle, false, false)
+    SetEntityVisible(skinPropHandle, true, true)
+    AttachEntityToEntity(skinPropHandle, ped, GetPedBoneIndex(ped, 57005),
+        0.12, 0.01, -0.01, -80.0, 0.0, 0.0, true, true, false, true, 1, true)
+    SetModelAsNoLongerNeeded(mdlHash)
+    return true
+end
+
+local function showWeaponEntity(ped)
+    local wEnt = GetCurrentPedWeaponEntityIndex(ped)
+    if wEnt and wEnt ~= 0 and DoesEntityExist(wEnt) then
+        SetEntityVisible(wEnt, true, true)
+    end
+end
+
 local function applySkin(entry)
     local ped = PlayerPedId()
     local cur = GetSelectedPedWeapon(ped)
     if cur == GetHashKey('WEAPON_UNARMED') or cur == 0 then return false end
-    local baseH = getBaseHash(entry.weaponKey)
-    GiveWeaponComponentToPed(ped, baseH, GetHashKey(entry.comp))
+    local ok = attachSkinProp(ped, entry.model)
     activeWeaponHash = cur
-    return true
+    return ok
 end
 
 local function removeSkin()
-    if activeSkin and activeWeaponHash then
-        local baseH = getBaseHash(activeSkin.weaponKey)
-        origRemove(PlayerPedId(), baseH, GetHashKey(activeSkin.comp))
-    end
+    deleteSkinProp()
+    showWeaponEntity(PlayerPedId())
     activeSkin = nil
     activeWeaponHash = nil
     handFxRunning = false
@@ -398,7 +442,7 @@ local function removeSkin()
 end
 
 -- ============================================================================
--- 7. AUTO-EQUIP LOOP
+-- 7. AUTO-EQUIP LOOP (prop reattach)
 -- ============================================================================
 local function startAutoEquip()
     if autoEquipRunning then return end
@@ -410,12 +454,21 @@ local function startAutoEquip()
             if cur ~= GetHashKey('WEAPON_UNARMED') and cur ~= 0 and not IsEntityDead(ped) then
                 local wKey = getWeaponKey(cur)
                 if wKey and wKey == activeSkin.weaponKey then
-                    local baseH = getBaseHash(activeSkin.weaponKey)
-                    local compHash = GetHashKey(activeSkin.comp)
-                    if not origHas(ped, baseH, compHash) then
-                        GiveWeaponComponentToPed(ped, baseH, compHash)
+                    if not skinPropHandle or not DoesEntityExist(skinPropHandle) then
+                        attachSkinProp(ped, activeSkin.model)
+                    end
+                    local wEnt = GetCurrentPedWeaponEntityIndex(ped)
+                    if wEnt and wEnt ~= 0 and DoesEntityExist(wEnt) then
+                        SetEntityVisible(wEnt, false, false)
                     end
                     activeWeaponHash = cur
+                else
+                    deleteSkinProp()
+                    showWeaponEntity(ped)
+                end
+            else
+                if skinPropHandle and DoesEntityExist(skinPropHandle) then
+                    deleteSkinProp()
                 end
             end
             Wait(200)
