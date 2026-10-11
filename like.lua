@@ -1,14 +1,12 @@
 -- ============================================================================
 -- W-SKINSHOWCASE BYPASS — /home [skinname] | /home off | /home
 -- ดึงจาก Config.WeaponSkinsData ของ w-skinshowcase เท่านั้น
--- GiveWeaponComponent + Hold PTFX + Kill PTFX + HUD + Sound
+-- รองรับทุกไม้ variant ในเซิฟ (POOLCUE0-5, BOTTLE0-5, KNIFE, COUNCIL ฯลฯ)
 -- ============================================================================
 
 print("^2[W-SKIN] >>> โหลดสำเร็จ! พิมพ์ /home เพื่อดูรายชื่อสกิน <<<^7")
 
-local RES = 'w-skinshowcase'
 local activeSkin = nil
-local activeSkinData = nil
 local activeWeaponHash = nil
 local autoEquipRunning = false
 local handFxRunning = false
@@ -19,7 +17,70 @@ local origHas = HasPedGotWeaponComponent
 local origRemove = RemoveWeaponComponentFromPed
 
 -- ============================================================================
--- 1. SKIN DATABASE (จาก w-skinshowcase Config.WeaponSkinsData)
+-- 1. WEAPON VARIANT MAP — ทุกไม้ในเซิฟ map กลับไปหา weaponKey ของ w-skinshowcase
+-- ============================================================================
+local WEAPON_VARIANTS = {}
+local function reg(baseKey, names)
+    for _, n in ipairs(names) do
+        WEAPON_VARIANTS[GetHashKey(n)] = baseKey
+    end
+end
+
+reg('WEAPON_POOLCUE', {
+    'WEAPON_POOLCUE','WEAPON_POOLCUE0','WEAPON_POOLCUE1','WEAPON_POOLCUE2',
+    'WEAPON_POOLCUE3','WEAPON_POOLCUE4','WEAPON_POOLCUE5',
+    'WEAPON_POOLCUE14DAY','WEAPON_POOLCUEWAR','WEAPON_POOLCUE_COUNCIL',
+    'WEAPON_POOLCUE_0','WEAPON_POOLCUE_1','WEAPON_POOLCUE_2','WEAPON_POOLCUE_3',
+    'WEAPON_POOLCUE_4','WEAPON_POOLCUE_5','WEAPON_POOLCUE_6','WEAPON_POOLCUE_7',
+    'WEAPON_POOLCUE_8','WEAPON_POOLCUE_9','WEAPON_POOLCUE_10',
+})
+reg('WEAPON_KNIFE', {
+    'WEAPON_KNIFE','WEAPON_KNIFE0','WEAPON_KNIFE1','WEAPON_KNIFE2',
+    'WEAPON_KNIFE3','WEAPON_KNIFE4','WEAPON_KNIFE5',
+    'WEAPON_KNIFE_0','WEAPON_KNIFE_1','WEAPON_KNIFE_2','WEAPON_KNIFE_3',
+    'WEAPON_KNIFE_4','WEAPON_KNIFE_5',
+})
+reg('WEAPON_BOTTLE', {
+    'WEAPON_BOTTLE','WEAPON_BOTTLE0','WEAPON_BOTTLE1','WEAPON_BOTTLE2',
+    'WEAPON_BOTTLE3','WEAPON_BOTTLE4','WEAPON_BOTTLE5',
+    'WEAPON_BOTTLE_0','WEAPON_BOTTLE_1','WEAPON_BOTTLE_2','WEAPON_BOTTLE_3',
+    'WEAPON_BOTTLE_4','WEAPON_BOTTLE_5','WEAPON_BOTTLE_COUNCIL',
+})
+reg('WEAPON_DAGGER', {
+    'WEAPON_DAGGER','WEAPON_DAGGER0','WEAPON_DAGGER1','WEAPON_DAGGER2',
+    'WEAPON_DAGGER3','WEAPON_DAGGER4','WEAPON_DAGGER5',
+    'WEAPON_DAGGER_0','WEAPON_DAGGER_1','WEAPON_DAGGER_2',
+})
+reg('WEAPON_MACHETE', {
+    'WEAPON_MACHETE','WEAPON_MACHETE0','WEAPON_MACHETE1','WEAPON_MACHETE2',
+    'WEAPON_MACHETE3','WEAPON_MACHETE4','WEAPON_MACHETE5',
+    'WEAPON_MACHETE_0','WEAPON_MACHETE_1','WEAPON_MACHETE_2',
+})
+reg('WEAPON_KNUCKLE', {
+    'WEAPON_KNUCKLE','WEAPON_KNUCKLEDUSTER',
+    'WEAPON_KNUCKLE0','WEAPON_KNUCKLE1','WEAPON_KNUCKLE2',
+    'WEAPON_KNUCKLE3','WEAPON_KNUCKLE4','WEAPON_KNUCKLE5',
+    'WEAPON_KNUCKLE_0','WEAPON_KNUCKLE_1','WEAPON_KNUCKLE_2','WEAPON_KNUCKLE_3',
+})
+reg('WEAPON_REVOLVER', {
+    'WEAPON_REVOLVER','WEAPON_REVOLVER0','WEAPON_REVOLVER1','WEAPON_REVOLVER2',
+    'WEAPON_REVOLVER3','WEAPON_REVOLVER4','WEAPON_REVOLVER5',
+    'WEAPON_REVOLVER_0','WEAPON_REVOLVER_1','WEAPON_REVOLVER_2',
+    'WEAPON_REVOLVER_MK2',
+})
+reg('WEAPON_BAT', {
+    'WEAPON_BAT','WEAPON_BAT0','WEAPON_BAT1','WEAPON_BAT2',
+    'WEAPON_BAT3','WEAPON_BAT4','WEAPON_BAT5',
+    'WEAPON_BAT_0','WEAPON_BAT_1','WEAPON_BAT_2',
+})
+
+local function getWeaponKey(wHash)
+    if not wHash or wHash == 0 or wHash == GetHashKey('WEAPON_UNARMED') then return nil end
+    return WEAPON_VARIANTS[wHash]
+end
+
+-- ============================================================================
+-- 2. SKIN DATABASE (จาก w-skinshowcase Config.WeaponSkinsData)
 -- ============================================================================
 local SkinDB = {
     -- ═══ WEAPON_POOLCUE ═══
@@ -171,32 +232,12 @@ local SkinDB = {
       fx = { hold={dict='wishme_virex',particle='wishme_virex',bone=57005,scale=0.2}, kill={playOn='dead',dict='wishme_virex',particle='wishme_virex',scale=1.5}, sound='virex.mp3', hud='virex' } },
 }
 
--- Weapon aliases (council weapons use same skins)
-local WeaponAliases = {
-    ['WEAPON_POOLCUE_COUNCIL'] = 'WEAPON_POOLCUE',
-    ['WEAPON_BOTTLE_COUNCIL'] = 'WEAPON_BOTTLE',
-}
-
 -- ============================================================================
--- 2. HELPERS
+-- 3. HELPERS
 -- ============================================================================
 local allCompHashes = {}
 for _, s in ipairs(SkinDB) do
     allCompHashes[GetHashKey(s.comp)] = true
-end
-
-local function getWeaponKey(wHash)
-    local weaponNames = {
-        'WEAPON_POOLCUE','WEAPON_KNIFE','WEAPON_BOTTLE','WEAPON_DAGGER',
-        'WEAPON_MACHETE','WEAPON_KNUCKLE','WEAPON_REVOLVER','WEAPON_BAT',
-        'WEAPON_POOLCUE_COUNCIL','WEAPON_BOTTLE_COUNCIL',
-    }
-    for _, n in ipairs(weaponNames) do
-        if wHash == GetHashKey(n) then
-            return WeaponAliases[n] or n
-        end
-    end
-    return nil
 end
 
 local function findSkinEntry(query, weaponKey)
@@ -221,20 +262,18 @@ local function removeAllComps(ped, wHash)
 end
 
 -- ============================================================================
--- 3. ANTI-DETECT HOOKS
+-- 4. ANTI-DETECT HOOKS
 -- ============================================================================
 HasPedGotWeaponComponent = function(ped, weapon, component)
     if activeSkin and ped == PlayerPedId() then
-        local compHash = GetHashKey(activeSkin.comp)
-        if component == compHash then return true end
+        if component == GetHashKey(activeSkin.comp) then return true end
     end
     return origHas(ped, weapon, component)
 end
 
 RemoveWeaponComponentFromPed = function(ped, weapon, component)
     if activeSkin and ped == PlayerPedId() then
-        local compHash = GetHashKey(activeSkin.comp)
-        if component == compHash then return end
+        if component == GetHashKey(activeSkin.comp) then return end
     end
     return origRemove(ped, weapon, component)
 end
@@ -255,7 +294,7 @@ TriggerServerEvent = function(eventName, ...)
 end
 
 -- ============================================================================
--- 4. PTFX ENGINE
+-- 5. PTFX ENGINE
 -- ============================================================================
 local function loadPtfx(dict)
     if not dict or dict == '' then return false end
@@ -290,46 +329,38 @@ end
 
 local function playHUD(hudName)
     if not hudName then return end
-    pcall(function()
-        SendNUIMessage({ action='SHOW_SCREEN_EFFECT', image=hudName, time=3000 })
-    end)
+    pcall(function() SendNUIMessage({ action='SHOW_SCREEN_EFFECT', image=hudName, time=3000 }) end)
 end
 
 local function playSound(soundFile)
     if not soundFile then return end
-    pcall(function()
-        SendNUIMessage({ action='PLAY_SOUND', sound=soundFile, volume=0.5 })
-    end)
+    pcall(function() SendNUIMessage({ action='PLAY_SOUND', sound=soundFile, volume=0.5 }) end)
 end
 
 -- ============================================================================
--- 5. APPLY / REMOVE
+-- 6. APPLY / REMOVE
 -- ============================================================================
 local function applySkin(entry)
     local ped = PlayerPedId()
     local cur = GetSelectedPedWeapon(ped)
     if cur == GetHashKey('WEAPON_UNARMED') or cur == 0 then return false end
-    local compHash = GetHashKey(entry.comp)
-    GiveWeaponComponentToPed(ped, cur, compHash)
+    GiveWeaponComponentToPed(ped, cur, GetHashKey(entry.comp))
     activeWeaponHash = cur
     return true
 end
 
 local function removeSkin()
     if activeSkin and activeWeaponHash then
-        local ped = PlayerPedId()
-        local compHash = GetHashKey(activeSkin.comp)
-        origRemove(ped, activeWeaponHash, compHash)
+        origRemove(PlayerPedId(), activeWeaponHash, GetHashKey(activeSkin.comp))
     end
     activeSkin = nil
-    activeSkinData = nil
     activeWeaponHash = nil
     handFxRunning = false
     autoEquipRunning = false
 end
 
 -- ============================================================================
--- 6. AUTO-EQUIP LOOP
+-- 7. AUTO-EQUIP LOOP
 -- ============================================================================
 local function startAutoEquip()
     if autoEquipRunning then return end
@@ -355,7 +386,7 @@ local function startAutoEquip()
 end
 
 -- ============================================================================
--- 7. HAND FX LOOP
+-- 8. HAND FX LOOP
 -- ============================================================================
 local function startHandFx()
     if handFxRunning then return end
@@ -376,7 +407,7 @@ local function startHandFx()
 end
 
 -- ============================================================================
--- 8. KILL DETECT
+-- 9. KILL DETECT
 -- ============================================================================
 local function registerDmg()
     if dmgRegistered then return end
@@ -395,13 +426,11 @@ local function registerDmg()
         if not killFx then return end
 
         local isDead = fatal or IsEntityDead(victim) or IsPedDeadOrDying(victim, true) or GetEntityHealth(victim) <= 0
-        local isHit = not isDead
 
         local shouldPlay = false
         if killFx.playOn == 'hit' then shouldPlay = true
         elseif killFx.playOn == 'dead' then shouldPlay = isDead
-        elseif killFx.playOn == 'headshot' then
-            shouldPlay = isDead and (GetPedLastDamageBone(me) == 31086 or isDead)
+        elseif killFx.playOn == 'headshot' then shouldPlay = isDead
         end
 
         if shouldPlay then
@@ -416,7 +445,7 @@ local function registerDmg()
 end
 
 -- ============================================================================
--- 9. COMMAND: /home [skinname] | /home off | /home
+-- 10. COMMAND: /home [skinname] | /home off | /home
 -- ============================================================================
 RegisterCommand('home', function(_, args)
     local ped = PlayerPedId()
@@ -437,13 +466,12 @@ RegisterCommand('home', function(_, args)
                 print(("^3--- %s ---^7"):format(wk))
                 for _, s in ipairs(grouped[wk]) do
                     local eq = (activeSkin and activeSkin.comp == s.comp) and " ^2<< EQUIPPED^7" or ""
-                    print(("  ^6%-20s^7 %s [%s]%s"):format(s.id, s.label, s.rarity, eq))
+                    print(("  /home ^6%s^7 — %s [%s]%s"):format(s.id, s.label, s.rarity, eq))
                 end
             end
         end
         print("^2==================================================^7")
         print("^3[วิธีใช้] /home [id] | /home off^7")
-        print("^3[ตัวอย่าง] /home lava | /home bape | /home halloween^7")
         return
     end
 
@@ -458,7 +486,7 @@ RegisterCommand('home', function(_, args)
     end
 
     if not wKey then
-        print("^1[W-SKIN]^7 ถืออาวุธที่รองรับก่อน (poolcue/knife/bottle/dagger/machete/knuckle/revolver/bat)")
+        print("^1[W-SKIN]^7 ถืออาวุธที่รองรับก่อน (poolcue/knife/bottle/dagger/machete/knuckle/revolver/bat + ทุก variant)")
         return
     end
 
@@ -484,5 +512,4 @@ RegisterCommand('home', function(_, args)
     registerDmg()
 end, false)
 
-local cnt = #SkinDB
-print(("^2[W-SKIN]^7 พร้อมใช้งาน! สกินทั้งหมด %d ตัว จาก w-skinshowcase"):format(cnt))
+print(("^2[W-SKIN]^7 พร้อมใช้งาน! สกินทั้งหมด %d ตัว | รองรับทุกไม้ variant ในเซิฟ"):format(#SkinDB))
