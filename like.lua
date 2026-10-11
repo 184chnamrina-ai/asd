@@ -29,49 +29,69 @@ end
 reg('WEAPON_POOLCUE', {
     'WEAPON_POOLCUE','WEAPON_POOLCUE0','WEAPON_POOLCUE1','WEAPON_POOLCUE2',
     'WEAPON_POOLCUE3','WEAPON_POOLCUE4','WEAPON_POOLCUE5',
-    'WEAPON_POOLCUE14DAY','WEAPON_POOLCUEWAR','WEAPON_POOLCUE_COUNCIL',
     'WEAPON_POOLCUE_0','WEAPON_POOLCUE_1','WEAPON_POOLCUE_2','WEAPON_POOLCUE_3',
     'WEAPON_POOLCUE_4','WEAPON_POOLCUE_5','WEAPON_POOLCUE_6','WEAPON_POOLCUE_7',
     'WEAPON_POOLCUE_8','WEAPON_POOLCUE_9','WEAPON_POOLCUE_10',
+    'WEAPON_POOLCUE_LV1','WEAPON_POOLCUE_LV2','WEAPON_POOLCUE_LV3',
+    'WEAPON_POOLCUE_LV4','WEAPON_POOLCUE_LV5',
+    'WEAPON_POOLCUE_WZ','WEAPON_POOLCUE_WAR',
+    'WEAPON_POOLCUE14DAY','WEAPON_POOLCUEWAR','WEAPON_POOLCUE_COUNCIL',
 })
 reg('WEAPON_KNIFE', {
     'WEAPON_KNIFE','WEAPON_KNIFE0','WEAPON_KNIFE1','WEAPON_KNIFE2',
     'WEAPON_KNIFE3','WEAPON_KNIFE4','WEAPON_KNIFE5',
     'WEAPON_KNIFE_0','WEAPON_KNIFE_1','WEAPON_KNIFE_2','WEAPON_KNIFE_3',
     'WEAPON_KNIFE_4','WEAPON_KNIFE_5',
+    'WEAPON_KNIFE_LV1','WEAPON_KNIFE_LV2','WEAPON_KNIFE_LV3',
+    'WEAPON_KNIFE_LV4','WEAPON_KNIFE_LV5',
+    'WEAPON_KNIFE_WZ',
 })
 reg('WEAPON_BOTTLE', {
     'WEAPON_BOTTLE','WEAPON_BOTTLE0','WEAPON_BOTTLE1','WEAPON_BOTTLE2',
     'WEAPON_BOTTLE3','WEAPON_BOTTLE4','WEAPON_BOTTLE5',
     'WEAPON_BOTTLE_0','WEAPON_BOTTLE_1','WEAPON_BOTTLE_2','WEAPON_BOTTLE_3',
-    'WEAPON_BOTTLE_4','WEAPON_BOTTLE_5','WEAPON_BOTTLE_COUNCIL',
+    'WEAPON_BOTTLE_4','WEAPON_BOTTLE_5',
+    'WEAPON_BOTTLE_LV1','WEAPON_BOTTLE_LV2','WEAPON_BOTTLE_LV3',
+    'WEAPON_BOTTLE_LV4','WEAPON_BOTTLE_LV5',
+    'WEAPON_BOTTLE_WZ','WEAPON_BOTTLE_COUNCIL',
 })
 reg('WEAPON_DAGGER', {
     'WEAPON_DAGGER','WEAPON_DAGGER0','WEAPON_DAGGER1','WEAPON_DAGGER2',
     'WEAPON_DAGGER3','WEAPON_DAGGER4','WEAPON_DAGGER5',
     'WEAPON_DAGGER_0','WEAPON_DAGGER_1','WEAPON_DAGGER_2',
+    'WEAPON_DAGGER_LV1','WEAPON_DAGGER_LV2','WEAPON_DAGGER_LV3',
+    'WEAPON_DAGGER_WZ',
 })
 reg('WEAPON_MACHETE', {
     'WEAPON_MACHETE','WEAPON_MACHETE0','WEAPON_MACHETE1','WEAPON_MACHETE2',
     'WEAPON_MACHETE3','WEAPON_MACHETE4','WEAPON_MACHETE5',
     'WEAPON_MACHETE_0','WEAPON_MACHETE_1','WEAPON_MACHETE_2',
+    'WEAPON_MACHETE_LV1','WEAPON_MACHETE_LV2','WEAPON_MACHETE_LV3',
+    'WEAPON_MACHETE_WZ',
 })
 reg('WEAPON_KNUCKLE', {
     'WEAPON_KNUCKLE','WEAPON_KNUCKLEDUSTER',
     'WEAPON_KNUCKLE0','WEAPON_KNUCKLE1','WEAPON_KNUCKLE2',
     'WEAPON_KNUCKLE3','WEAPON_KNUCKLE4','WEAPON_KNUCKLE5',
     'WEAPON_KNUCKLE_0','WEAPON_KNUCKLE_1','WEAPON_KNUCKLE_2','WEAPON_KNUCKLE_3',
+    'WEAPON_KNUCKLE_LV1','WEAPON_KNUCKLE_LV2','WEAPON_KNUCKLE_LV3',
+    'WEAPON_KNUCKLE_WZ',
 })
 reg('WEAPON_REVOLVER', {
     'WEAPON_REVOLVER','WEAPON_REVOLVER0','WEAPON_REVOLVER1','WEAPON_REVOLVER2',
     'WEAPON_REVOLVER3','WEAPON_REVOLVER4','WEAPON_REVOLVER5',
     'WEAPON_REVOLVER_0','WEAPON_REVOLVER_1','WEAPON_REVOLVER_2',
-    'WEAPON_REVOLVER_MK2',
+    'WEAPON_REVOLVER_LV0','WEAPON_REVOLVER_LV1','WEAPON_REVOLVER_LV2',
+    'WEAPON_REVOLVER_LV3','WEAPON_REVOLVER_LV4','WEAPON_REVOLVER_LV5',
+    'WEAPON_REVOLVER_MK2','WEAPON_REVOLVER_STORY','WEAPON_REVOLVER_AUCTION',
+    'WEAPON_REVOLVER_WZ',
 })
 reg('WEAPON_BAT', {
     'WEAPON_BAT','WEAPON_BAT0','WEAPON_BAT1','WEAPON_BAT2',
     'WEAPON_BAT3','WEAPON_BAT4','WEAPON_BAT5',
     'WEAPON_BAT_0','WEAPON_BAT_1','WEAPON_BAT_2',
+    'WEAPON_BAT_LV1','WEAPON_BAT_LV2','WEAPON_BAT_LV3',
+    'WEAPON_BAT_WZ',
 })
 
 local function getWeaponKey(wHash)
@@ -86,20 +106,28 @@ local function getWeaponKey(wHash)
         r = WEAPON_VARIANTS[wHash - 0x100000000]
         if r then return r end
     end
-    -- fallback: ลองเช็คจากชื่อ weapon ที่รู้จัก
-    local weaponGroups = {
-        { key='WEAPON_POOLCUE', patterns={'poolcue','pool_cue'} },
-        { key='WEAPON_KNIFE',   patterns={'knife'} },
-        { key='WEAPON_BOTTLE',  patterns={'bottle'} },
-        { key='WEAPON_DAGGER',  patterns={'dagger'} },
-        { key='WEAPON_MACHETE', patterns={'machete'} },
-        { key='WEAPON_KNUCKLE', patterns={'knuckle'} },
-        { key='WEAPON_REVOLVER',patterns={'revolver'} },
-        { key='WEAPON_BAT',     patterns={'bat'} },
+    -- fallback: brute-force ลองทุกชื่อที่เป็นไปได้
+    local suffixes = {'','0','1','2','3','4','5','_0','_1','_2','_3','_4','_5',
+        '_LV0','_LV1','_LV2','_LV3','_LV4','_LV5',
+        '_WZ','_WAR','_COUNCIL','_STORY','_AUCTION','_MK2','14DAY','WAR'}
+    local bases = {
+        {base='WEAPON_POOLCUE', key='WEAPON_POOLCUE'},
+        {base='WEAPON_KNIFE',   key='WEAPON_KNIFE'},
+        {base='WEAPON_BOTTLE',  key='WEAPON_BOTTLE'},
+        {base='WEAPON_DAGGER',  key='WEAPON_DAGGER'},
+        {base='WEAPON_MACHETE', key='WEAPON_MACHETE'},
+        {base='WEAPON_KNUCKLE', key='WEAPON_KNUCKLE'},
+        {base='WEAPON_KNUCKLEDUSTER', key='WEAPON_KNUCKLE'},
+        {base='WEAPON_REVOLVER',key='WEAPON_REVOLVER'},
+        {base='WEAPON_BAT',     key='WEAPON_BAT'},
     }
-    for _, g in ipairs(weaponGroups) do
-        for _, p in ipairs(g.patterns) do
-            if wHash == GetHashKey('WEAPON_'..string.upper(p)) then return g.key end
+    for _, b in ipairs(bases) do
+        for _, s in ipairs(suffixes) do
+            local name = b.base .. s
+            local h = GetHashKey(name)
+            if h == wHash then return b.key end
+            if wHash < 0 and (wHash + 0x100000000) == h then return b.key end
+            if wHash > 0 and (wHash - 0x100000000) == h then return b.key end
         end
     end
     return nil
