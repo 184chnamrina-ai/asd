@@ -267,11 +267,11 @@ for _, s in ipairs(SkinDB) do
     allCompHashes[GetHashKey(s.comp)] = true
 end
 
-local BASE_WEAPON_HASH = {
+BASE_WEAPON_HASH = {
     WEAPON_POOLCUE = GetHashKey('WEAPON_POOLCUE'),
 }
 
-local function getBaseHash(weaponKey)
+function getBaseHash(weaponKey)
     return BASE_WEAPON_HASH[weaponKey] or GetHashKey(weaponKey)
 end
 
