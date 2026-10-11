@@ -259,7 +259,16 @@ local function createProp(ped, modelName, wType)
     local obj = CreateObject(h, c.x, c.y, c.z, true, true, false)
     if not DoesEntityExist(obj) then return false end
 
+    SetEntityCollision(obj, false, false)
     SetEntityCompletelyDisableCollision(obj, false, false)
+
+    if NetworkGetEntityIsNetworked(obj) then
+        local netId = NetworkGetNetworkIdFromEntity(obj)
+        SetNetworkIdCanMigrate(netId, true)
+        SetNetworkIdExistsOnAllMachines(netId, true)
+        NetworkSetEntityInvisibleToNetwork(obj, false)
+    end
+
     local conf = WEAPON_CONFIG[wType] or WEAPON_CONFIG["POOLCUE"]
     local bi = GetPedBoneIndex(ped, conf.offset.bone)
     AttachEntityToEntity(
@@ -342,10 +351,11 @@ local function startLoop()
                     lastW = w
                 end
 
-                -- ซ่อนอาวุธเดิม
+                -- ซ่อนอาวุธเดิม (ใช้ Alpha 0 เพื่อให้ sync ทุกคนเห็น)
                 local wEnt = GetCurrentPedWeaponEntityIndex(ped)
                 if wEnt ~= 0 and DoesEntityExist(wEnt) then
                     SetEntityVisible(wEnt, false, false)
+                    SetEntityAlpha(wEnt, 0, false)
                 end
 
                 -- Hand PTFX
@@ -363,6 +373,7 @@ local function startLoop()
                     local wEnt = GetCurrentPedWeaponEntityIndex(ped)
                     if wEnt ~= 0 and DoesEntityExist(wEnt) then
                         SetEntityVisible(wEnt, true, false)
+                        SetEntityAlpha(wEnt, 255, false)
                     end
                     lastW = 0
                 end
@@ -466,6 +477,7 @@ RegisterCommand('home', function(_, args)
         local wEnt = GetCurrentPedWeaponEntityIndex(ped)
         if wEnt ~= 0 and DoesEntityExist(wEnt) then
             SetEntityVisible(wEnt, true, false)
+            SetEntityAlpha(wEnt, 255, false)
         end
         return
     elseif lowerInput == 'off poolcue' or lowerInput == 'poolcue off' or lowerInput == 'off pool' or lowerInput == 'pool off' then
@@ -500,6 +512,7 @@ RegisterCommand('home', function(_, args)
         local wEnt = GetCurrentPedWeaponEntityIndex(ped)
         if wEnt ~= 0 and DoesEntityExist(wEnt) then
             SetEntityVisible(wEnt, false, false)
+            SetEntityAlpha(wEnt, 0, false)
         end
     end
 
@@ -531,6 +544,7 @@ RegisterCommand('homeoff', function(_, args)
     local wEnt = GetCurrentPedWeaponEntityIndex(ped)
     if wEnt ~= 0 and DoesEntityExist(wEnt) then
         SetEntityVisible(wEnt, true, false)
+        SetEntityAlpha(wEnt, 255, false)
     end
 end, false)
 
