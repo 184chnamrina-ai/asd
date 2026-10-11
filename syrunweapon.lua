@@ -1,6 +1,7 @@
 -- =====================================================================
--- BYPASS Ex_Weaponeffects + Weapon Skin Unlocker (FINAL v2)
+-- BYPASS Ex_Weaponeffects + Weapon Skin Unlocker (PROP ATTACH v3)
 -- /skin [ชื่อ] = ใส่สกิน | /skin off = ถอด | /skinlist = ดูรายชื่อ
+-- วิธี: สร้าง 3D Object ของสกิน Attach ไปที่มือ + ซ่อนอาวุธเดิม
 -- =====================================================================
 
 print("^2[SKIN] >>> โหลดสำเร็จ! /skinlist ดูสกิน | /skin [ชื่อ] ใส่สกิน ^7")
@@ -10,33 +11,19 @@ end)
 
 local active = false
 local currentSkinKey = nil
-local protectedHashes = {}
-local equippedWeaponHash = nil
+local currentSkinData = nil
+local activePropEntity = nil
 local holdFxToken = 0
-local autoEquipToken = 0
 local damageHandlerRegistered = false
 local lastEffectTime = 0
+local lastHiddenWeaponEntity = nil
 
--- =============================================
--- HOOK RemoveWeaponComponentFromPed / HasPedGotWeaponComponent
--- ป้องกัน nc_inventory ถอดสกินของเรา (loop ทุก 500ms)
--- =============================================
-local origRemoveComponent = RemoveWeaponComponentFromPed
-local origHasPedGot = HasPedGotWeaponComponent
-
-RemoveWeaponComponentFromPed = function(ped, weapon, component)
-    if active and protectedHashes[component] then
-        return
-    end
-    return origRemoveComponent(ped, weapon, component)
-end
-
-HasPedGotWeaponComponent = function(ped, weapon, component)
-    if active and protectedHashes[component] and ped == PlayerPedId() then
-        return true
-    end
-    return origHasPedGot(ped, weapon, component)
-end
+local ATTACH_CONFIG = {
+    Bone = 28422,
+    Pos = { x = 0.055, y = 0.045, z = 0.01 },
+    Rot = { x = -77.0, y = -23.0, z = -16.0 },
+    RotOrder = 0
+}
 
 -- ========== WEAPON TYPE DETECTION ==========
 local ALL_WEAPON_NAMES = {
@@ -107,37 +94,61 @@ local SKIN_DB = {
     tiger_bottle  = { label="WHITE TIGER", weaponType="bottle",  skinModel="sharkz_bottle_white_tiger",     component="COMPONENT_BOTTLE_SKIN_04" },
 }
 
-local ALL_SKIN_NAMES = {}
-for _, data in pairs(SKIN_DB) do
-    ALL_SKIN_NAMES[#ALL_SKIN_NAMES + 1] = data.skinModel
-    ALL_SKIN_NAMES[#ALL_SKIN_NAMES + 1] = data.component
+-- ========== PROP MANAGEMENT ==========
+local function RestoreWeaponVisibility()
+    if lastHiddenWeaponEntity and DoesEntityExist(lastHiddenWeaponEntity) then
+        SetEntityVisible(lastHiddenWeaponEntity, true, false)
+        ResetEntityAlpha(lastHiddenWeaponEntity)
+    end
+    lastHiddenWeaponEntity = nil
 end
 
--- ========== COMPONENT ==========
-local function RealRemoveAllSkins(ped, wHash)
-    for _, name in ipairs(ALL_SKIN_NAMES) do
-        local h = GetHashKey(name)
+local function SafeDeleteProp()
+    if activePropEntity then
         pcall(function()
-            if origHasPedGot(ped, wHash, h) then
-                origRemoveComponent(ped, wHash, h)
+            if DoesEntityExist(activePropEntity) then
+                DetachEntity(activePropEntity, true, true)
+                SetEntityAsMissionEntity(activePropEntity, true, true)
+                DeleteEntity(activePropEntity)
             end
         end)
+        activePropEntity = nil
     end
+    RestoreWeaponVisibility()
 end
 
-local function ForceApplySkin(ped, wHash, skinData)
-    if not skinData then return end
-    protectedHashes = {}
-    RealRemoveAllSkins(ped, wHash)
+local function CreateSkinProp(ped, modelName)
+    SafeDeleteProp()
 
-    local h1 = GetHashKey(skinData.skinModel)
-    local h2 = GetHashKey(skinData.component)
+    local modelHash = GetHashKey(modelName)
+    if not IsModelInCdimage(modelHash) then return false end
 
-    GiveWeaponComponentToPed(ped, wHash, h1)
-    GiveWeaponComponentToPed(ped, wHash, h2)
+    RequestModel(modelHash)
+    local tries = 0
+    while not HasModelLoaded(modelHash) and tries < 50 do Wait(10) tries = tries + 1 end
+    if not HasModelLoaded(modelHash) then return false end
 
-    protectedHashes[h1] = true
-    protectedHashes[h2] = true
+    local coords = GetEntityCoords(ped)
+    activePropEntity = CreateObject(modelHash, coords.x, coords.y, coords.z - 50.0, true, true, false)
+    if not activePropEntity or not DoesEntityExist(activePropEntity) then return false end
+
+    SetEntityCollision(activePropEntity, false, false)
+    pcall(SetEntityCompletelyDisableCollision, activePropEntity, false, true)
+    pcall(DisableCamCollisionForObject, activePropEntity)
+
+    local att = ATTACH_CONFIG
+    local boneIndex = GetPedBoneIndex(ped, att.Bone)
+    if boneIndex == -1 then boneIndex = GetPedBoneIndex(ped, 28422) end
+
+    AttachEntityToEntity(
+        activePropEntity, ped, boneIndex,
+        att.Pos.x, att.Pos.y, att.Pos.z,
+        att.Rot.x, att.Rot.y, att.Rot.z,
+        true, true, false, false, att.RotOrder, true
+    )
+
+    SetModelAsNoLongerNeeded(modelHash)
+    return true
 end
 
 -- ========== PTFX ==========
@@ -261,29 +272,45 @@ local function RegisterDamageHandler()
     end)
 end
 
--- ========== AUTO EQUIP ==========
-local function StartAutoEquip(skinData)
-    autoEquipToken = autoEquipToken + 1
-    local myToken = autoEquipToken
-    CreateThread(function()
-        while myToken == autoEquipToken and active do
-            local ped = PlayerPedId()
-            local ok, cur = IsHoldingWeapon()
-            if ok then
-                local wt = GetWeaponType(cur)
-                if wt == skinData.weaponType or wt == nil then
-                    local h1 = GetHashKey(skinData.skinModel)
-                    local h2 = GetHashKey(skinData.component)
-                    if not origHasPedGot(ped, cur, h1) and not origHasPedGot(ped, cur, h2) then
-                        ForceApplySkin(ped, cur, skinData)
+-- ========== MAIN LOOP: Prop Attach + ซ่อนอาวุธเดิม ==========
+CreateThread(function()
+    Wait(2000)
+    BuildHashCache()
+
+    while true do
+        local ped = PlayerPedId()
+        local shouldHaveProp = false
+
+        if DoesEntityExist(ped) and not IsEntityDead(ped) and active and currentSkinData then
+            local curWeapon = GetSelectedPedWeapon(ped)
+            local isUnarmed = (curWeapon == GetHashKey('WEAPON_UNARMED') or curWeapon == 0)
+
+            if not isUnarmed then
+                local wt = GetWeaponType(curWeapon)
+                if wt and wt == currentSkinData.weaponType then
+                    local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
+                    local hasWeaponEntity = wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity)
+
+                    if hasWeaponEntity then
+                        shouldHaveProp = true
+                        if not activePropEntity or not DoesEntityExist(activePropEntity) then
+                            CreateSkinProp(ped, currentSkinData.skinModel)
+                        end
+                        SetEntityVisible(wepEntity, false, false)
+                        SetEntityAlpha(wepEntity, 0, false)
+                        lastHiddenWeaponEntity = wepEntity
                     end
-                    equippedWeaponHash = cur
                 end
             end
-            Wait(300)
         end
-    end)
-end
+
+        if not shouldHaveProp and activePropEntity then
+            SafeDeleteProp()
+        end
+
+        Wait(0)
+    end
+end)
 
 -- ========== ANTI-DETECT ==========
 local origTSE = TriggerServerEvent
@@ -306,14 +333,6 @@ local function SendMsg(t)
     print("^3[SKIN]^7 " .. t)
     pcall(function() TriggerEvent('chat:addMessage', { args = {"[SKIN]", t} }) end)
 end
-
-local function StopLoops()
-    holdFxToken = holdFxToken + 1
-    autoEquipToken = autoEquipToken + 1
-end
-
--- ========== INIT ==========
-CreateThread(function() Wait(2000) BuildHashCache() end)
 
 -- ========== /skinlist ==========
 RegisterCommand('skinlist', function()
@@ -365,39 +384,29 @@ RegisterCommand('skindebug', function()
     local cur = GetSelectedPedWeapon(ped)
     local we = GetCurrentPedWeaponEntityIndex(ped)
     local wt = GetWeaponType(cur)
-    local mdl = (we ~= 0 and DoesEntityExist(we)) and GetEntityModel(we) or nil
 
     print("^2========== [SKIN DEBUG] ==========^7")
     print(("  ^3Weapon Hash:^7 %s (0x%X)"):format(cur, cur & 0xFFFFFFFF))
-    print(("  ^3Type:^7 %s | Entity: %s | Model: %s"):format(tostring(wt or "UNKNOWN"), tostring(we), tostring(mdl)))
+    print(("  ^3Type:^7 %s | WeaponEntity: %s"):format(tostring(wt or "UNKNOWN"), tostring(we)))
     print(("  ^3Active:^7 %s | Skin: %s"):format(tostring(active), tostring(currentSkinKey or "none")))
+    print(("  ^3Prop:^7 %s | Exists: %s"):format(
+        tostring(activePropEntity),
+        tostring(activePropEntity and DoesEntityExist(activePropEntity) or false)
+    ))
 
-    if currentSkinKey and SKIN_DB[currentSkinKey] then
-        local sd = SKIN_DB[currentSkinKey]
-        local h1, h2 = GetHashKey(sd.skinModel), GetHashKey(sd.component)
-        print(("  ^3skinModel:^7 %s hash:%s real:%s hooked:%s"):format(
-            sd.skinModel, h1,
-            tostring(origHasPedGot(ped, cur, h1)),
-            tostring(HasPedGotWeaponComponent(ped, cur, h1))
-        ))
-        print(("  ^3component:^7 %s hash:%s real:%s hooked:%s"):format(
-            sd.component, h2,
-            tostring(origHasPedGot(ped, cur, h2)),
-            tostring(HasPedGotWeaponComponent(ped, cur, h2))
-        ))
-        print(("  ^3protected:^7 skinModel=%s component=%s"):format(
-            tostring(protectedHashes[h1] or false),
-            tostring(protectedHashes[h2] or false)
+    if currentSkinData then
+        local modelHash = GetHashKey(currentSkinData.skinModel)
+        print(("  ^3skinModel:^7 %s"):format(currentSkinData.skinModel))
+        print(("  ^3modelHash:^7 %s | InCdimage: %s"):format(modelHash, tostring(IsModelInCdimage(modelHash))))
+    end
+
+    if we and we ~= 0 and DoesEntityExist(we) then
+        print(("  ^3WeaponEntity visible:^7 %s | alpha: %s"):format(
+            tostring(IsEntityVisible(we)),
+            tostring(GetEntityAlpha(we))
         ))
     end
 
-    print("  ^3Weapon hash matches:^7")
-    for _, name in ipairs(ALL_WEAPON_NAMES) do
-        local h = GetHashKey(name)
-        if h == cur or (cur < 0 and cur + 0x100000000 == h) or (cur > 0 and cur - 0x100000000 == h) then
-            print(("    ^2%s = %s << MATCH^7"):format(name, h))
-        end
-    end
     print("^2===================================^7")
     SendMsg("^2Debug ขึ้น F8 แล้ว^0")
 end, false)
@@ -406,20 +415,22 @@ end, false)
 RegisterCommand('skin', function(_, args)
     local input = args[1]
     local ped = PlayerPedId()
-    local cur = GetSelectedPedWeapon(ped)
 
     if not input or input == '' then SendMsg("^3/skinlist ดูสกิน | /skin [ชื่อ] ใส่ | /skin off ถอด^0") return end
     if input:lower() == 'list' then ExecuteCommand('skinlist') return end
     if input:lower() == 'debug' then ExecuteCommand('skindebug') return end
 
     if input:lower() == 'off' or input:lower() == 'clear' or input:lower() == 'default' then
-        StopLoops()
-        protectedHashes = {}
-        if equippedWeaponHash then RealRemoveAllSkins(ped, equippedWeaponHash) end
-        if cur ~= GetHashKey('WEAPON_UNARMED') then RealRemoveAllSkins(ped, cur) end
+        holdFxToken = holdFxToken + 1
+        SafeDeleteProp()
         currentSkinKey = nil
-        equippedWeaponHash = nil
+        currentSkinData = nil
         active = false
+        local we = GetCurrentPedWeaponEntityIndex(ped)
+        if we and we ~= 0 and DoesEntityExist(we) then
+            SetEntityVisible(we, true, false)
+            ResetEntityAlpha(we)
+        end
         SendMsg("^1[OFF]^0 ถอดสกินและเอฟเฟคทั้งหมดแล้ว")
         return
     end
@@ -449,22 +460,14 @@ RegisterCommand('skin', function(_, args)
     end
     if not fk then SendMsg(("^1[NOT FOUND]^0 ไม่พบสกิน '%s' (/skinlist ดูรายชื่อ)"):format(input)) return end
 
-    -- หยุด loop เก่า + ปลด protection
-    StopLoops()
-    protectedHashes = {}
-
-    -- ถอดสกินเก่าจริงๆ (ใช้ orig function)
-    if equippedWeaponHash then RealRemoveAllSkins(ped, equippedWeaponHash) end
-    if held ~= equippedWeaponHash then RealRemoveAllSkins(ped, held) end
+    holdFxToken = holdFxToken + 1
+    SafeDeleteProp()
 
     currentSkinKey = fk
+    currentSkinData = fd
     active = true
-    equippedWeaponHash = held
 
-    -- ใส่สกินใหม่ + ตั้ง protection
-    ForceApplySkin(ped, held, fd)
-
-    StartAutoEquip(fd)
+    CreateSkinProp(ped, fd.skinModel)
     StartHoldFxLoop(fd)
     RegisterDamageHandler()
 
