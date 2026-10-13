@@ -1,13 +1,13 @@
 -- ═══════════════════════════════════════════════════════════════════════════════
--- 1nfx_weaponskin — Weapon Skin Unlocker (Config-only)
--- ดึง Config จาก 1nfx_weaponskin เท่านั้น ใช้ได้ทุกไม้
+-- 1nfx_weaponskin — Weapon Skin Unlocker (No Config Needed)
+-- ใช้ได้ทุกไม้ ไม่ต้องพึ่ง Config จาก resource
 -- Commands: /home <skinname> | /homelist | /homeoff
 -- ═══════════════════════════════════════════════════════════════════════════════
 
-local RES = "1nfx_weaponskin"
+print("^2[1nfx] Loading weapon skin script...^7")
+
 local active = false
 local selectedSkin = nil
-local selectedSkinCfg = nil
 local equippedOnWeapon = nil
 local autoEquipActive = false
 local handFxLoopActive = false
@@ -16,176 +16,167 @@ local lastEffectTime = 0
 local currentPropEntity = nil
 local currentPropModel = nil
 
+local origHasPedGot = HasPedGotWeaponComponent
+local origRemoveComponent = RemoveWeaponComponentFromPed
+local origTSE = TriggerServerEvent
+
 -- ═══════════════════════════════════════════════════════════════════════════════
--- WEAPON MAP — ครอบคลุมทุกไม้/อาวุธ
+-- WEAPON MAP — ครอบคลุมทุกไม้
 -- ═══════════════════════════════════════════════════════════════════════════════
-local WEAPON_MAP = {
-    poolcue = {
-        GetHashKey('WEAPON_POOLCUE'), GetHashKey('WEAPON_POOLCUE_0'), GetHashKey('WEAPON_POOLCUE_1'),
-        GetHashKey('WEAPON_POOLCUE_2'), GetHashKey('WEAPON_POOLCUE_3'), GetHashKey('WEAPON_POOLCUE_4'),
-        GetHashKey('WEAPON_POOLCUE_5'), GetHashKey('WEAPON_POOLCUE0'), GetHashKey('WEAPON_POOLCUE1'),
-        GetHashKey('WEAPON_POOLCUE2'), GetHashKey('WEAPON_POOLCUE3'), GetHashKey('WEAPON_POOLCUE4'),
-        GetHashKey('WEAPON_POOLCUE5'), GetHashKey('WEAPON_POOLCUE_RENT'), GetHashKey('WEAPON_POOLCUE14DAY'),
-        GetHashKey('WEAPON_POOLCUEWAR'),
-    },
-    bottle = {
-        GetHashKey('WEAPON_BOTTLE'), GetHashKey('WEAPON_BOTTLE_0'), GetHashKey('WEAPON_BOTTLE_1'),
-        GetHashKey('WEAPON_BOTTLE_2'), GetHashKey('WEAPON_BOTTLE_3'), GetHashKey('WEAPON_BOTTLE_4'),
-        GetHashKey('WEAPON_BOTTLE_5'), GetHashKey('WEAPON_BOTTLE0'), GetHashKey('WEAPON_BOTTLE1'),
-        GetHashKey('WEAPON_BOTTLE2'), GetHashKey('WEAPON_BOTTLE3'), GetHashKey('WEAPON_BOTTLE4'),
-        GetHashKey('WEAPON_BOTTLE5'),
-    },
-    knife = {
-        GetHashKey('WEAPON_KNIFE'), GetHashKey('WEAPON_KNIFE_1'), GetHashKey('WEAPON_KNIFE_2'),
-        GetHashKey('WEAPON_KNIFE_3'), GetHashKey('WEAPON_KNIFE_4'),
-        GetHashKey('WEAPON_SWITCHBLADE'),
-    },
-    dagger = {
-        GetHashKey('WEAPON_DAGGER'), GetHashKey('WEAPON_DAGGER_0'), GetHashKey('WEAPON_DAGGER_1'),
-        GetHashKey('WEAPON_DAGGER_2'),
-    },
-    knuckle = {
-        GetHashKey('WEAPON_KNUCKLEDUSTER'), GetHashKey('WEAPON_KNUCKLE'),
-        GetHashKey('WEAPON_KNUCKLE_0'), GetHashKey('WEAPON_KNUCKLE_1'),
-        GetHashKey('WEAPON_KNUCKLE_2'), GetHashKey('WEAPON_KNUCKLE_3'),
-    },
-    machete = {
-        GetHashKey('WEAPON_MACHETE'), GetHashKey('WEAPON_MACHETE_0'),
-        GetHashKey('WEAPON_MACHETE_1'), GetHashKey('WEAPON_MACHETE_2'),
-        GetHashKey('WEAPON_MACHETE_3'), GetHashKey('WEAPON_MACHETTE_0'),
-        GetHashKey('WEAPON_MACHETTE_1'), GetHashKey('WEAPON_MACHETTE_2'),
-        GetHashKey('WEAPON_MACHETTE_3'),
-    },
-    bat = {
-        GetHashKey('WEAPON_BAT'), GetHashKey('WEAPON_BAT_0'), GetHashKey('WEAPON_BAT_1'),
-        GetHashKey('WEAPON_BAT_2'), GetHashKey('WEAPON_BAT_3'),
-    },
-    revolver = {
-        GetHashKey('WEAPON_REVOLVER'), GetHashKey('WEAPON_REVOLVER_0'),
-        GetHashKey('WEAPON_REVOLVER_1'), GetHashKey('WEAPON_REVOLVER_2'),
-        GetHashKey('WEAPON_REVOLVER_3'),
-    },
+local WEAPON_HASHES = {}
+local weaponNames = {
+    'WEAPON_POOLCUE','WEAPON_POOLCUE_0','WEAPON_POOLCUE_1','WEAPON_POOLCUE_2',
+    'WEAPON_POOLCUE_3','WEAPON_POOLCUE_4','WEAPON_POOLCUE_5',
+    'WEAPON_POOLCUE0','WEAPON_POOLCUE1','WEAPON_POOLCUE2','WEAPON_POOLCUE3',
+    'WEAPON_POOLCUE4','WEAPON_POOLCUE5','WEAPON_POOLCUE_RENT','WEAPON_POOLCUE14DAY','WEAPON_POOLCUEWAR',
+    'WEAPON_BOTTLE','WEAPON_BOTTLE_0','WEAPON_BOTTLE_1','WEAPON_BOTTLE_2',
+    'WEAPON_BOTTLE_3','WEAPON_BOTTLE_4','WEAPON_BOTTLE_5',
+    'WEAPON_BOTTLE0','WEAPON_BOTTLE1','WEAPON_BOTTLE2','WEAPON_BOTTLE3',
+    'WEAPON_BOTTLE4','WEAPON_BOTTLE5',
+    'WEAPON_KNIFE','WEAPON_KNIFE_1','WEAPON_KNIFE_2','WEAPON_KNIFE_3','WEAPON_KNIFE_4',
+    'WEAPON_SWITCHBLADE',
+    'WEAPON_DAGGER','WEAPON_DAGGER_0','WEAPON_DAGGER_1','WEAPON_DAGGER_2',
+    'WEAPON_KNUCKLEDUSTER','WEAPON_KNUCKLE','WEAPON_KNUCKLE_0','WEAPON_KNUCKLE_1',
+    'WEAPON_KNUCKLE_2','WEAPON_KNUCKLE_3',
+    'WEAPON_MACHETE','WEAPON_MACHETE_0','WEAPON_MACHETE_1','WEAPON_MACHETE_2','WEAPON_MACHETE_3',
+    'WEAPON_MACHETTE_0','WEAPON_MACHETTE_1','WEAPON_MACHETTE_2','WEAPON_MACHETTE_3',
+    'WEAPON_BAT','WEAPON_BAT_0','WEAPON_BAT_1','WEAPON_BAT_2','WEAPON_BAT_3',
+    'WEAPON_REVOLVER','WEAPON_REVOLVER_0','WEAPON_REVOLVER_1','WEAPON_REVOLVER_2','WEAPON_REVOLVER_3',
 }
+for _, name in ipairs(weaponNames) do
+    WEAPON_HASHES[GetHashKey(name)] = true
+end
 
-local SKIN_DB = {}
-local allKnownComponentHashes = {}
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- DETECT WEAPON TYPE จากชื่อสกิน
--- ═══════════════════════════════════════════════════════════════════════════════
-local function DetectWeaponType(skinName)
-    local lower = string.lower(skinName)
-    if lower:find("poolcue") or lower:find("pool") then return "poolcue" end
-    if lower:find("bottle") then return "bottle" end
-    if lower:find("dagger") then return "dagger" end
-    if lower:find("knife") or lower:find("switchblade") then return "knife" end
-    if lower:find("knuckle") then return "knuckle" end
-    if lower:find("machete") or lower:find("machette") then return "machete" end
-    if lower:find("bat") then return "bat" end
-    if lower:find("revolver") or lower:find("gun") then return "revolver" end
-    return nil
+local function IsWeaponSupported(hash)
+    return WEAPON_HASHES[hash] or false
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- BUILD SKIN DB — ดึงจาก Config ของ 1nfx_weaponskin เท่านั้น
+-- SKIN DATABASE — scan จาก resource โดยตรง + built-in list
 -- ═══════════════════════════════════════════════════════════════════════════════
+local SKIN_DB = {}
+
+local function TryLoadFromResource()
+    local resNames = {
+        '1nfx_weaponskin', 'gN_weaponskin', 'Secret_Weaponskin',
+        'ar_weaponskinmenu', 'weaponskin', 'weapon_skin',
+    }
+    local configFiles = {
+        'config.weaponskin.lua', 'config.lua', 'shared/config.lua',
+        'core/config.lua', 'client/config.lua', 'data/config.lua',
+        'config/weaponskin.lua', 'config/config.lua',
+    }
+
+    for _, resName in ipairs(resNames) do
+        if GetResourceState(resName) ~= 'started' then goto nextRes end
+
+        for _, fileName in ipairs(configFiles) do
+            local raw = LoadResourceFile(resName, fileName)
+            if raw and raw ~= '' and raw:find("WEAPON_SKIN") then
+                local env = setmetatable({ Config = {} }, { __index = _G })
+                local fn = load(raw, '@' .. resName .. '/' .. fileName, 't', env)
+                if fn then
+                    local ok = pcall(fn)
+                    if ok and env.Config['WEAPON_SKIN'] and next(env.Config['WEAPON_SKIN']) then
+                        print(("^2[1nfx] Loaded config from %s/%s^7"):format(resName, fileName))
+                        return env.Config
+                    end
+                end
+            end
+        end
+
+        local manifest = LoadResourceFile(resName, 'fxmanifest.lua') or ''
+        for luaFile in manifest:gmatch("['\"]([^'\"]-%.lua)['\"]") do
+            local raw = LoadResourceFile(resName, luaFile)
+            if raw and raw ~= '' and raw:find("WEAPON_SKIN") then
+                local env = setmetatable({ Config = {} }, { __index = _G })
+                local fn = load(raw, '@' .. resName .. '/' .. luaFile, 't', env)
+                if fn then
+                    local ok = pcall(fn)
+                    if ok and env.Config['WEAPON_SKIN'] and next(env.Config['WEAPON_SKIN']) then
+                        print(("^2[1nfx] Loaded config from %s/%s^7"):format(resName, luaFile))
+                        return env.Config
+                    end
+                end
+            end
+        end
+
+        ::nextRes::
+    end
+
+    local numRes = GetNumResources()
+    for i = 0, numRes - 1 do
+        local resName = GetResourceByFindIndex(i)
+        if resName and GetResourceState(resName) == 'started' then
+            local l = resName:lower()
+            if l:find('weapon') or l:find('skin') or l:find('1nfx') then
+                for _, fileName in ipairs(configFiles) do
+                    local raw = LoadResourceFile(resName, fileName)
+                    if raw and raw ~= '' and raw:find("WEAPON_SKIN") then
+                        local env = setmetatable({ Config = {} }, { __index = _G })
+                        local fn = load(raw, '@' .. resName .. '/' .. fileName, 't', env)
+                        if fn then
+                            local ok = pcall(fn)
+                            if ok and env.Config['WEAPON_SKIN'] and next(env.Config['WEAPON_SKIN']) then
+                                print(("^2[1nfx] Loaded config from %s/%s^7"):format(resName, fileName))
+                                return env.Config
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return nil
+end
+
+local LoadedConfig = nil
+
+local function GetSkinCfg(skinName)
+    if LoadedConfig and LoadedConfig['WEAPON_SKIN'] and LoadedConfig['WEAPON_SKIN'][skinName] then
+        return LoadedConfig['WEAPON_SKIN'][skinName]
+    end
+    return nil
+end
+
 local function BuildSkinDB()
     SKIN_DB = {}
-    allKnownComponentHashes = {}
 
-    local weaponSkinCfg = nil
-    if Config and Config['WEAPON_SKIN'] then
-        weaponSkinCfg = Config['WEAPON_SKIN']
+    if not LoadedConfig then
+        LoadedConfig = TryLoadFromResource()
     end
 
-    if not weaponSkinCfg then
-        pcall(function()
-            local resCfg = exports[RES]:GetConfig()
-            if resCfg and resCfg['WEAPON_SKIN'] then
-                weaponSkinCfg = resCfg['WEAPON_SKIN']
+    if LoadedConfig and LoadedConfig['WEAPON_SKIN'] then
+        for skinName, data in pairs(LoadedConfig['WEAPON_SKIN']) do
+            if type(data) == 'table' then
+                SKIN_DB[skinName] = {
+                    model = data.MODEL or skinName,
+                    label = data.SKIN_LABEL or skinName,
+                }
             end
-        end)
-    end
-
-    if not weaponSkinCfg then
-        print("^1[1nfx] Config['WEAPON_SKIN'] not found — waiting...^7")
-        return false
-    end
-
-    for skinName, data in pairs(weaponSkinCfg) do
-        if type(data) == 'table' then
-            local model = data.MODEL or skinName
-            local weaponType = DetectWeaponType(skinName)
-            if data.Category then
-                weaponType = string.lower(data.Category)
-                if weaponType == 'pool' then weaponType = 'poolcue' end
-            end
-
-            SKIN_DB[skinName] = {
-                model = model,
-                weaponType = weaponType,
-                label = data.SKIN_LABEL or data.label or skinName,
-            }
-
-            allKnownComponentHashes[GetHashKey(model)] = true
-            allKnownComponentHashes[GetHashKey(string.upper(model))] = true
-            allKnownComponentHashes[GetHashKey(string.lower(model))] = true
-            allKnownComponentHashes[GetHashKey("COMPONENT_" .. string.upper(model))] = true
         end
     end
-
-    print(("^2[1nfx] Loaded %d skins from Config^7"):format(0 + (function() local c=0 for _ in pairs(SKIN_DB) do c=c+1 end return c end)()))
-    return true
-end
-
--- ═══════════════════════════════════════════════════════════════════════════════
--- HELPERS
--- ═══════════════════════════════════════════════════════════════════════════════
-local function GetCurrentWeaponType(weaponHash)
-    for wType, hashes in pairs(WEAPON_MAP) do
-        for _, h in ipairs(hashes) do
-            if h == weaponHash then return wType end
-        end
-    end
-    return nil
-end
-
-local function GetAllWeaponHashes()
-    local all = {}
-    for _, hashes in pairs(WEAPON_MAP) do
-        for _, h in ipairs(hashes) do
-            all[h] = true
-        end
-    end
-    return all
 end
 
 local function FindSkin(query)
-    if not query or query == '' then return nil, nil end
+    if not query or query == '' then return nil end
     local q = string.lower(query)
-    if SKIN_DB[query] then return query, SKIN_DB[query] end
     for k, v in pairs(SKIN_DB) do
-        if string.lower(k) == q then return k, v end
+        if string.lower(k) == q then return k end
     end
     for k, v in pairs(SKIN_DB) do
-        if v.label and string.lower(v.label) == q then return k, v end
+        if v.label and string.lower(v.label) == q then return k end
     end
     for k, v in pairs(SKIN_DB) do
-        if string.find(string.lower(k), q, 1, true) then return k, v end
-        if v.label and string.find(string.lower(v.label), q, 1, true) then return k, v end
-    end
-    return nil, nil
-end
-
-local function GetSkinCfg(skinName)
-    if Config and Config['WEAPON_SKIN'] and Config['WEAPON_SKIN'][skinName] then
-        return Config['WEAPON_SKIN'][skinName]
+        if string.find(string.lower(k), q, 1, true) then return k end
+        if v.label and string.find(string.lower(v.label), q, 1, true) then return k end
     end
     return nil
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- PROP ATTACH ENGINE
+-- PROP ATTACH
 -- ═══════════════════════════════════════════════════════════════════════════════
 local function RemoveSkinProp()
     if currentPropEntity and DoesEntityExist(currentPropEntity) then
@@ -211,7 +202,7 @@ local function AttachSkinProp(ped, modelName)
     if not IsModelValid(modelHash) then return false end
 
     RequestModel(modelHash)
-    local deadline = GetGameTimer() + 800
+    local deadline = GetGameTimer() + 1500
     while not HasModelLoaded(modelHash) and GetGameTimer() < deadline do Wait(10) end
     if not HasModelLoaded(modelHash) then return false end
 
@@ -222,24 +213,12 @@ local function AttachSkinProp(ped, modelName)
     SetEntityCollision(prop, false, false)
     SetEntityInvincible(prop, true)
 
-    local px, py, pz = 0.055, 0.045, 0.01
-    local rx, ry, rz = -77.0, -23.0, -16.0
-    local boneId = 28422
-
-    if Config and Config.WeaponPosition then
-        local posCfg = Config.WeaponPosition['POOL'] or Config.WeaponPosition['POOLCUE']
-        if posCfg then
-            px = (posCfg.Pos and posCfg.Pos.x) or px
-            py = (posCfg.Pos and posCfg.Pos.y) or py
-            pz = (posCfg.Pos and posCfg.Pos.z) or pz
-            rx = (posCfg.Rot and posCfg.Rot.x) or rx
-            ry = (posCfg.Rot and posCfg.Rot.y) or ry
-            rz = (posCfg.Rot and posCfg.Rot.z) or rz
-        end
-    end
-
-    local boneIndex = GetPedBoneIndex(ped, boneId)
-    AttachEntityToEntity(prop, ped, boneIndex, px, py, pz, rx, ry, rz, true, true, false, true, 0, true)
+    local boneIndex = GetPedBoneIndex(ped, 28422)
+    AttachEntityToEntity(prop, ped, boneIndex,
+        0.055, 0.045, 0.01,
+        -77.0, -23.0, -16.0,
+        true, true, false, true, 0, true
+    )
 
     currentPropEntity = prop
     currentPropModel = modelName
@@ -249,47 +228,41 @@ local function AttachSkinProp(ped, modelName)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- APPLY / REMOVE SKIN (Component + Prop hybrid) — ใช้ได้ทุกไม้
+-- APPLY / REMOVE — ใช้ชื่อตรงๆ ไม่ต้องมี Config
 -- ═══════════════════════════════════════════════════════════════════════════════
-local origHasPedGot = HasPedGotWeaponComponent
-local origRemoveComponent = RemoveWeaponComponentFromPed
-local origTSE = TriggerServerEvent
-
-local function RemoveAllSkinComponents(ped, weaponHash)
-    if not ped or not DoesEntityExist(ped) or weaponHash == 0 then return end
-    for compHash in pairs(allKnownComponentHashes) do
-        if origHasPedGot(ped, weaponHash, compHash) then
-            origRemoveComponent(ped, weaponHash, compHash)
-        end
-    end
-end
+local appliedHashes = {}
 
 local function ApplySkin(skinName)
     local ped = PlayerPedId()
     local currentWeapon = GetSelectedPedWeapon(ped)
     if currentWeapon == GetHashKey('WEAPON_UNARMED') or currentWeapon == 0 then return false end
 
-    local data = SKIN_DB[skinName]
-    local modelName = (data and data.model) or skinName
+    local modelName = skinName
+    local dbEntry = SKIN_DB[skinName]
+    if dbEntry then modelName = dbEntry.model or skinName end
 
-    RemoveAllSkinComponents(ped, currentWeapon)
+    local h1 = GetHashKey(modelName)
+    local h2 = GetHashKey(string.upper(modelName))
+    local h3 = GetHashKey("COMPONENT_" .. string.upper(modelName))
 
-    local skinHash = GetHashKey(modelName)
-    local upperHash = GetHashKey(string.upper(modelName))
-    local compHash = GetHashKey("COMPONENT_" .. string.upper(modelName))
+    GiveWeaponComponentToPed(ped, currentWeapon, h1)
+    GiveWeaponComponentToPed(ped, currentWeapon, h2)
+    GiveWeaponComponentToPed(ped, currentWeapon, h3)
 
-    GiveWeaponComponentToPed(ped, currentWeapon, skinHash)
-    GiveWeaponComponentToPed(ped, currentWeapon, upperHash)
-    GiveWeaponComponentToPed(ped, currentWeapon, compHash)
-
-    local isComp = origHasPedGot(ped, currentWeapon, skinHash)
-              or origHasPedGot(ped, currentWeapon, upperHash)
-              or origHasPedGot(ped, currentWeapon, compHash)
+    local isComp = origHasPedGot(ped, currentWeapon, h1)
+              or origHasPedGot(ped, currentWeapon, h2)
+              or origHasPedGot(ped, currentWeapon, h3)
 
     if isComp then
         RemoveSkinProp()
+        appliedHashes = { h1, h2, h3 }
     else
-        AttachSkinProp(ped, modelName)
+        local attached = AttachSkinProp(ped, modelName)
+        if attached then
+            appliedHashes = { h1, h2, h3 }
+        else
+            appliedHashes = { h1, h2, h3 }
+        end
     end
 
     equippedOnWeapon = currentWeapon
@@ -297,15 +270,21 @@ local function ApplySkin(skinName)
 end
 
 local function RemoveSkin()
-    if selectedSkin and equippedOnWeapon then
-        RemoveAllSkinComponents(PlayerPedId(), equippedOnWeapon)
+    if equippedOnWeapon then
+        local ped = PlayerPedId()
+        for _, h in ipairs(appliedHashes) do
+            if origHasPedGot(ped, equippedOnWeapon, h) then
+                origRemoveComponent(ped, equippedOnWeapon, h)
+            end
+        end
     end
     RemoveSkinProp()
     equippedOnWeapon = nil
+    appliedHashes = {}
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- PTFX
+-- PTFX HAND EFFECT
 -- ═══════════════════════════════════════════════════════════════════════════════
 local function EnsurePtfxLoaded(dict)
     if not dict or dict == '' then return false end
@@ -323,11 +302,8 @@ local function StartHandFx(skinName)
     local cfg = GetSkinCfg(skinName)
     if not cfg or not cfg.PTFX_ATTACH_BONE then return end
 
-    local fxList = cfg.PTFX_ATTACH_BONE
-    if not fxList or #fxList == 0 then return end
-
     handFxLoopActive = true
-    for _, fx in ipairs(fxList) do
+    for _, fx in ipairs(cfg.PTFX_ATTACH_BONE) do
         CreateThread(function()
             while handFxLoopActive and active do
                 local ped = PlayerPedId()
@@ -336,16 +312,15 @@ local function StartHandFx(skinName)
                 else
                     local dict = fx.Dict or fx.dict
                     local eff = fx.Eff or fx.eff
-                    local bone = fx.Bone or fx.bone or 57005
-                    local scale = fx.Scale or fx.scale or 1.0
-
                     if dict and eff and EnsurePtfxLoaded(dict) then
                         UseParticleFxAsset(dict)
                         StartParticleFxNonLoopedOnPedBone(
                             eff, ped,
                             fx.xPos or 0.12, fx.yPos or 0.0, fx.zPos or 0.0,
                             fx.xRot or 0.0, fx.yRot or 0.0, fx.zRot or 65.0,
-                            bone, scale, false, false, false
+                            fx.Bone or fx.bone or 57005,
+                            fx.Scale or fx.scale or 1.0,
+                            false, false, false
                         )
                     end
                     Wait(fx.Time or fx.time or 800)
@@ -356,12 +331,11 @@ local function StartHandFx(skinName)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- KILL / HIT EFFECTS
+-- KILL EFFECTS
 -- ═══════════════════════════════════════════════════════════════════════════════
 local function PlayKillEffect(victimPed, skinName)
     local now = GetGameTimer()
-    local effDelay = (Config and Config['GENERAL'] and Config['GENERAL'].EFF_DELAY) or 3000
-    if now - lastEffectTime < effDelay then return end
+    if now - lastEffectTime < 3000 then return end
     lastEffectTime = now
 
     local cfg = GetSkinCfg(skinName)
@@ -375,7 +349,6 @@ local function PlayKillEffect(victimPed, skinName)
             local bPos = GetWorldPositionOfEntityBone(victimPed, headBone)
             if bPos and #(bPos - pos) < 3.0 and bPos.z > 0.0 then targetPos = bPos end
         end
-
         for _, ptfx in ipairs(cfg.EFF_CRITICAL_DEAD) do
             local dict = ptfx.DICT or ptfx.dict
             local eff = ptfx.EFF or ptfx.eff
@@ -383,23 +356,17 @@ local function PlayKillEffect(victimPed, skinName)
             if dict and eff and EnsurePtfxLoaded(dict) then
                 UseParticleFxAsset(dict)
                 StartParticleFxNonLoopedAtCoord(eff, targetPos.x, targetPos.y, targetPos.z, 0.0, 0.0, 0.0, scale, false, false, false)
-                UseParticleFxAsset(dict)
-                StartNetworkedParticleFxNonLoopedAtCoord(eff, targetPos.x, targetPos.y, targetPos.z, 0.0, 0.0, 0.0, scale, false, false, false)
             end
         end
     end
 
     if cfg.SCREEN and cfg.SCREEN.SCREEN_NAME and cfg.SCREEN.SCREEN_NAME ~= '' then
-        local screenTime = (Config and Config['GENERAL'] and Config['GENERAL'].SCREEN_TIME) or 3000
-        SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = cfg.SCREEN.SCREEN_NAME, time = screenTime })
+        SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = cfg.SCREEN.SCREEN_NAME, time = 3000 })
     end
 
-    local audioData = cfg.AUDIO_CRITICAL_DEAD
-    if not audioData or not audioData.AUDIO_NAME or audioData.AUDIO_NAME == '' then
-        audioData = cfg.AUDIO_HIT
-    end
-    if audioData and audioData.AUDIO_NAME and audioData.AUDIO_NAME ~= '' then
-        SendNUIMessage({ action = 'PLAY_SOUND', sound = audioData.AUDIO_NAME, volume = tonumber(audioData.AUDIO_VOLUME) or 0.5 })
+    local audio = cfg.AUDIO_CRITICAL_DEAD or cfg.AUDIO_HIT
+    if audio and audio.AUDIO_NAME and audio.AUDIO_NAME ~= '' then
+        SendNUIMessage({ action = 'PLAY_SOUND', sound = audio.AUDIO_NAME, volume = tonumber(audio.AUDIO_VOLUME) or 0.5 })
     end
 end
 
@@ -409,18 +376,14 @@ end
 local function RegisterDamageHandler()
     if damageRegistered then return end
     damageRegistered = true
-
     AddEventHandler("gameEventTriggered", function(eventName, eventData)
         if not active or not selectedSkin then return end
         if eventName ~= "CEventNetworkEntityDamage" then return end
-
         local victim = eventData[1]
         local attacker = eventData[2]
         local isDead = eventData[4]
         local ped = PlayerPedId()
-
         if attacker ~= ped or victim == ped then return end
-
         if isDead == 1 or IsEntityDead(victim) or IsPedDeadOrDying(victim, true) then
             PlayKillEffect(victim, selectedSkin)
         end
@@ -428,7 +391,7 @@ local function RegisterDamageHandler()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- AUTO EQUIP — ทำงานกับทุกไม้ที่ตรง weaponType
+-- AUTO EQUIP — ทำงานกับทุกไม้
 -- ═══════════════════════════════════════════════════════════════════════════════
 local function StartAutoEquip()
     if autoEquipActive then return end
@@ -436,27 +399,23 @@ local function StartAutoEquip()
     CreateThread(function()
         while autoEquipActive and active do
             local ped = PlayerPedId()
-            local currentWeapon = GetSelectedPedWeapon(ped)
-            if selectedSkin and currentWeapon ~= GetHashKey('WEAPON_UNARMED') and currentWeapon ~= 0 then
-                local skinData = SKIN_DB[selectedSkin]
-                if skinData then
-                    local currentType = GetCurrentWeaponType(currentWeapon)
-                    local skinType = skinData.weaponType
-                    local match = (skinType == currentType)
-                    if not match and not skinType then match = true end
+            local curWeapon = GetSelectedPedWeapon(ped)
+            if selectedSkin and curWeapon ~= GetHashKey('WEAPON_UNARMED') and curWeapon ~= 0 and IsWeaponSupported(curWeapon) then
+                local modelName = selectedSkin
+                local dbEntry = SKIN_DB[selectedSkin]
+                if dbEntry then modelName = dbEntry.model or selectedSkin end
 
-                    if match then
-                        local modelName = skinData.model or selectedSkin
-                        local skinHash = GetHashKey(modelName)
-                        if not origHasPedGot(ped, currentWeapon, skinHash) then
-                            if not (currentPropEntity and DoesEntityExist(currentPropEntity) and currentPropModel == modelName) then
-                                ApplySkin(selectedSkin)
-                            end
-                        end
-                        if currentPropEntity and DoesEntityExist(currentPropEntity) then
-                            SetPedCurrentWeaponVisible(ped, false, false, false, false)
-                        end
-                    end
+                local skinHash = GetHashKey(modelName)
+                local needApply = not origHasPedGot(ped, curWeapon, skinHash)
+                    and not (currentPropEntity and DoesEntityExist(currentPropEntity) and currentPropModel == modelName)
+
+                if needApply then
+                    equippedOnWeapon = curWeapon
+                    ApplySkin(selectedSkin)
+                end
+
+                if currentPropEntity and DoesEntityExist(currentPropEntity) then
+                    SetPedCurrentWeaponVisible(ped, false, false, false, false)
                 end
             end
             Wait(150)
@@ -466,16 +425,16 @@ local function StartAutoEquip()
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- ANTI-DETECT HOOKS
+-- ANTI-DETECT
 -- ═══════════════════════════════════════════════════════════════════════════════
 TriggerServerEvent = function(eventName, ...)
     if active and type(eventName) == "string" then
         local lower = string.lower(eventName)
-        if lower:find("1nfx") or lower:find("weaponskin") then
+        if lower:find("1nfx") or lower:find("weaponskin") or lower:find("gn_weapon") then
             if lower:find("report") or lower:find("guard") or lower:find("detect")
                 or lower:find("kick") or lower:find("cheat") or lower:find("check")
                 or lower:find("log") or lower:find("ban") or lower:find("verify")
-                or lower:find("anticheat") or lower:find("validate") or lower:find("security") then
+                or lower:find("anticheat") or lower:find("security") then
                 return
             end
         end
@@ -484,24 +443,18 @@ TriggerServerEvent = function(eventName, ...)
 end
 
 RemoveWeaponComponentFromPed = function(ped, weapon, component)
-    if active and selectedSkin then
-        local modelName = (SKIN_DB[selectedSkin] and SKIN_DB[selectedSkin].model) or selectedSkin
-        local h1 = GetHashKey(modelName)
-        local h2 = GetHashKey(string.upper(modelName))
-        local h3 = GetHashKey("COMPONENT_" .. string.upper(modelName))
-        if component == h1 or component == h2 or component == h3 then return end
+    if active and #appliedHashes > 0 then
+        for _, h in ipairs(appliedHashes) do
+            if component == h then return end
+        end
     end
     return origRemoveComponent(ped, weapon, component)
 end
 
 HasPedGotWeaponComponent = function(ped, weapon, component)
-    if active and selectedSkin then
-        local modelName = (SKIN_DB[selectedSkin] and SKIN_DB[selectedSkin].model) or selectedSkin
-        local h1 = GetHashKey(modelName)
-        local h2 = GetHashKey(string.upper(modelName))
-        local h3 = GetHashKey("COMPONENT_" .. string.upper(modelName))
-        if ped == PlayerPedId() and (component == h1 or component == h2 or component == h3) then
-            return true
+    if active and #appliedHashes > 0 and ped == PlayerPedId() then
+        for _, h in ipairs(appliedHashes) do
+            if component == h then return true end
         end
     end
     return origHasPedGot(ped, weapon, component)
@@ -511,96 +464,79 @@ end
 -- KVP SAVE / LOAD
 -- ═══════════════════════════════════════════════════════════════════════════════
 local KVP_KEY = "1nfx_saved_skin"
-
-local function SaveSkinKVP(skinName)
-    if skinName and skinName ~= '' then
-        SetResourceKvp(KVP_KEY, skinName)
-    else
-        DeleteResourceKvp(KVP_KEY)
-    end
-end
-
-local function LoadSkinKVP()
-    local val = GetResourceKvpString(KVP_KEY)
-    if val and val ~= '' then return val end
-    return nil
-end
+local function SaveSkinKVP(s) if s and s ~= '' then SetResourceKvp(KVP_KEY, s) else DeleteResourceKvp(KVP_KEY) end end
+local function LoadSkinKVP() local v = GetResourceKvpString(KVP_KEY) if v and v ~= '' then return v end return nil end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- INIT — รอ Config โหลดแล้วสร้าง DB
+-- INIT
 -- ═══════════════════════════════════════════════════════════════════════════════
 CreateThread(function()
-    local attempts = 0
-    while attempts < 30 do
-        Wait(1000)
-        attempts = attempts + 1
-        if BuildSkinDB() then break end
-    end
-
-    if next(SKIN_DB) == nil then
-        print("^1[1nfx] Could not load Config after 30s^7")
-        return
+    Wait(3000)
+    BuildSkinDB()
+    local count = 0
+    for _ in pairs(SKIN_DB) do count = count + 1 end
+    if count > 0 then
+        print(("^2[1nfx] Loaded %d skins from resource config^7"):format(count))
+    else
+        print("^3[1nfx] No config found — /home <modelname> ใช้ชื่อโมเดลตรงๆ ได้เลย^7")
     end
 
     local saved = LoadSkinKVP()
-    if saved and SKIN_DB[saved] then
+    if saved then
         selectedSkin = saved
-        selectedSkinCfg = GetSkinCfg(saved)
         active = true
         StartAutoEquip()
         StartHandFx(saved)
         RegisterDamageHandler()
-        print(("^2[1nfx] Auto-loaded saved skin: %s^7"):format(saved))
+        print(("^2[1nfx] Auto-loaded: %s^7"):format(saved))
     end
 end)
 
 AddEventHandler('onResourceStop', function(resName)
-    if resName == GetCurrentResourceName() then
-        RemoveSkinProp()
-    end
+    if resName == GetCurrentResourceName() then RemoveSkinProp() end
 end)
 
 -- ═══════════════════════════════════════════════════════════════════════════════
 -- COMMANDS
 -- ═══════════════════════════════════════════════════════════════════════════════
-
 RegisterCommand('home', function(_, args)
-    BuildSkinDB()
-
     if #args < 1 then
-        print("^1[1nfx] Usage: /home <skinname>^7")
+        print("^1[1nfx] /home <skinname> — พิมพ์ชื่อสกินหรือชื่อโมเดลตรงๆ^7")
         return
     end
 
     RemoveSkin()
     StopHandFx()
 
-    local skinKey, skinData = FindSkin(args[1])
-    if not skinKey then
-        print(("^1[1nfx] Skin not found: '%s' — use /homelist^7"):format(args[1]))
-        return
-    end
+    local input = args[1]
+    local skinKey = FindSkin(input) or input
 
     selectedSkin = skinKey
-    selectedSkinCfg = GetSkinCfg(skinKey)
     active = true
 
-    ApplySkin(skinKey)
+    local ped = PlayerPedId()
+    local curWeapon = GetSelectedPedWeapon(ped)
+    if curWeapon ~= GetHashKey('WEAPON_UNARMED') and curWeapon ~= 0 then
+        ApplySkin(skinKey)
+    end
+
     StartAutoEquip()
     StartHandFx(skinKey)
     RegisterDamageHandler()
     SaveSkinKVP(skinKey)
 
-    print(("^2[1nfx] Equipped: %s (%s)^7"):format(skinData.label or skinKey, skinKey))
+    local label = skinKey
+    if SKIN_DB[skinKey] then label = SKIN_DB[skinKey].label or skinKey end
+    print(("^2[1nfx] Equipped: %s^7"):format(label))
 end, false)
 
 RegisterCommand('homeoff', function()
     RemoveSkin()
     StopHandFx()
     selectedSkin = nil
-    selectedSkinCfg = nil
     active = false
     autoEquipActive = false
+    appliedHashes = {}
     SaveSkinKVP(nil)
     print("^1[1nfx] Skin removed.^7")
 end, false)
@@ -608,40 +544,26 @@ end, false)
 RegisterCommand('homelist', function()
     BuildSkinDB()
 
-    local categories = {}
+    local skins = {}
     for skinName, data in pairs(SKIN_DB) do
-        local cat = data.weaponType or 'other'
-        if not categories[cat] then categories[cat] = {} end
-        categories[cat][#categories[cat] + 1] = { name = skinName, label = data.label or skinName }
+        skins[#skins + 1] = { name = skinName, label = data.label or skinName }
+    end
+    table.sort(skins, function(a, b) return a.name < b.name end)
+
+    if #skins == 0 then
+        print("^3[1nfx] ไม่พบ config — ใช้ /home <ชื่อโมเดล> ตรงๆ ได้เลย^7")
+        print("^3[1nfx] เช่น: /home w_me_poolcueredfire^7")
+        return
     end
 
-    local order = { 'poolcue', 'bottle', 'knife', 'dagger', 'knuckle', 'machete', 'bat', 'revolver', 'other' }
-    local catLabels = {
-        poolcue = 'POOLCUE', bottle = 'BOTTLE', knife = 'KNIFE',
-        dagger = 'DAGGER', knuckle = 'KNUCKLE', machete = 'MACHETE',
-        bat = 'BAT', revolver = 'REVOLVER', other = 'OTHER',
-    }
-
-    local total = 0
-    for _ in pairs(SKIN_DB) do total = total + 1 end
-
-    print(("^3═══════════════ [1nfx WEAPON SKINS] (%d) ═══════════════^7"):format(total))
-    for _, cat in ipairs(order) do
-        local skins = categories[cat]
-        if skins and #skins > 0 then
-            table.sort(skins, function(a, b) return a.name < b.name end)
-            print(("^3── %s (%d) ──^7"):format(catLabels[cat] or cat, #skins))
-            for _, s in ipairs(skins) do
-                local marker = (s.name == selectedSkin) and " ^2<< EQUIPPED^7" or ""
-                local cfg = GetSkinCfg(s.name)
-                local hasFx = (cfg and cfg.PTFX_ATTACH_BONE and #cfg.PTFX_ATTACH_BONE > 0) and "^6+HAND^7 " or ""
-                local hasKill = (cfg and cfg.EFF_CRITICAL_DEAD and #cfg.EFF_CRITICAL_DEAD > 0) and "^1+KILL^7 " or ""
-                print(("  ^7/home ^6%s^7  (%s) %s%s%s"):format(s.name, s.label, hasFx, hasKill, marker))
-            end
-        end
+    print(("^3═══════════ [1nfx WEAPON SKINS] (%d) ═══════════^7"):format(#skins))
+    for _, s in ipairs(skins) do
+        local marker = (s.name == selectedSkin) and " ^2<< EQUIPPED^7" or ""
+        local cfg = GetSkinCfg(s.name)
+        local fx = (cfg and cfg.PTFX_ATTACH_BONE) and "^6+FX^7 " or ""
+        print(("  /home ^6%s^7  (%s) %s%s"):format(s.name, s.label, fx, marker))
     end
-    print("^3═══════════════════════════════════════════════════════^7")
-    print("^2Usage: /home <skinname> | /homeoff | /homelist^7")
+    print("^3═══════════════════════════════════════════════^7")
 end, false)
 
-print("^2[1nfx_weaponskin] Loaded — /home <skin> | /homelist | /homeoff^7")
+print("^2[1nfx] Ready — /home <skin> | /homelist | /homeoff^7")
