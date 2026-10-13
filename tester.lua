@@ -215,6 +215,12 @@ local function AttachPropSkin(ped, modelName, pos, rot)
     return true
 end
 
+local function TryGiveComponent(ped, weaponHash, compHash)
+    GiveWeaponComponentToPed(ped, weaponHash, compHash)
+    if origHasPedGot(ped, weaponHash, compHash) then return true end
+    return false
+end
+
 local function ApplySkin(ped, weaponHash, entry)
     if not entry then return end
     skinAppliedAsComponent = false
@@ -226,24 +232,40 @@ local function ApplySkin(ped, weaponHash, entry)
 
     if entry.component then
         local compHash = GetHashKey(entry.component)
-        if DoesWeaponTakeWeaponComponent(weaponHash, compHash) then
-            GiveWeaponComponentToPed(ped, weaponHash, compHash)
-            Wait(100)
-            if origHasPedGot(ped, weaponHash, compHash) then
+
+        if TryGiveComponent(ped, weaponHash, compHash) then
+            skinAppliedAsComponent = true
+            return
+        end
+
+        local myCat = GetWeaponCategory(weaponHash)
+        if myCat and CATEGORY_MAP[myCat] then
+            for _, wpInfo in ipairs(CATEGORY_MAP[myCat]) do
+                if wpInfo.weaponHash ~= weaponHash then
+                    if TryGiveComponent(ped, wpInfo.weaponHash, compHash) then
+                        skinAppliedAsComponent = true
+                        return
+                    end
+                end
+            end
+        end
+
+        if entry.item then
+            local itemHash = GetHashKey(entry.item)
+            if TryGiveComponent(ped, weaponHash, itemHash) then
                 skinAppliedAsComponent = true
                 return
             end
         end
-        local compModel = string.lower(entry.component)
-        if IsModelValid(GetHashKey(compModel)) then
-            AttachPropSkin(ped, compModel, entry.pos, entry.rot)
-            return
+
+        if entry.upgrade and entry.upgrade ~= '' then
+            local upHash = GetHashKey(entry.upgrade)
+            if TryGiveComponent(ped, weaponHash, upHash) then
+                skinAppliedAsComponent = true
+                return
+            end
         end
-        local altModel = string.lower(entry.component):gsub("^component_", "w_me_"):gsub("_$", "")
-        if IsModelValid(GetHashKey(altModel)) then
-            AttachPropSkin(ped, altModel, entry.pos, entry.rot)
-            return
-        end
+
         GiveWeaponComponentToPed(ped, weaponHash, compHash)
         skinAppliedAsComponent = true
     end
@@ -425,25 +447,21 @@ local function StartAutoEquip()
             if curWp ~= 0 and curWp ~= GetHashKey('WEAPON_UNARMED') and selectedSkin and selectedItem then
                 local cat = GetWeaponCategory(curWp)
                 if cat and cat == selectedCategory then
-                    local needsReapply = false
-                    if skinAppliedAsComponent then
-                        local entry = FindSkinForWeapon(selectedSkin, curWp)
-                        if entry and entry.component then
-                            local compHash = GetHashKey(entry.component)
-                            if not origHasPedGot(ped, curWp, compHash) then
-                                needsReapply = true
+                    local entry = FindSkinForWeapon(selectedSkin, curWp)
+                    if entry then
+                        if entry.model and entry.model ~= '' then
+                            if not propObject or not DoesEntityExist(propObject) then
+                                ApplySkin(ped, curWp, entry)
                             end
-                        end
-                    else
-                        if not propObject or not DoesEntityExist(propObject) then
-                            needsReapply = true
-                        end
-                    end
-
-                    if needsReapply then
-                        local entry = FindSkinForWeapon(selectedSkin, curWp)
-                        if entry then
-                            ApplySkin(ped, curWp, entry)
+                        elseif entry.component then
+                            local compHash = GetHashKey(entry.component)
+                            GiveWeaponComponentToPed(ped, curWp, compHash)
+                            if entry.item then
+                                GiveWeaponComponentToPed(ped, curWp, GetHashKey(entry.item))
+                            end
+                            if entry.upgrade and entry.upgrade ~= '' then
+                                GiveWeaponComponentToPed(ped, curWp, GetHashKey(entry.upgrade))
+                            end
                         end
                     end
                     equippedOnWeapon = curWp
