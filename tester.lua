@@ -1,1107 +1,647 @@
--- ============================================================================
--- AQUA SERVER - ESX_RP-WEAPON-SKIN BYPASS (Poolcue & Bottle)
--- /home <skin>  |  /homeoff  |  /homelist
--- ============================================================================
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- 1nfx_weaponskin — Weapon Skin Unlocker (Config-only)
+-- ดึง Config จาก 1nfx_weaponskin เท่านั้น ใช้ได้ทุกไม้
+-- Commands: /home <skinname> | /homelist | /homeoff
+-- ═══════════════════════════════════════════════════════════════════════════════
 
-local activeSkins = {
-    ["POOLCUE"] = nil,
-    ["BOTTLE"]  = nil,
-}
+local RES = "1nfx_weaponskin"
+local active = false
+local selectedSkin = nil
+local selectedSkinCfg = nil
+local equippedOnWeapon = nil
+local autoEquipActive = false
+local handFxLoopActive = false
+local damageRegistered = false
+local lastEffectTime = 0
+local currentPropEntity = nil
+local currentPropModel = nil
 
-local propEntity = nil
-local propModelName = nil
-local currentPropType = nil
-local loopRunning = false
-local dmgReady = false
-local lastKill = 0
-local RES = "esx_rp-weapon-skin"
-
--- ── Weapon Hashes & Mapping ──
-local WEAPON_CONFIG = {
-    ["POOLCUE"] = {
-        names = {
-            "WEAPON_POOLCUE", "WEAPON_POOLCUE_V1", "WEAPON_POOLCUE_V2",
-            "WEAPON_POOLCUE_V3", "WEAPON_POOLCUE_V4", "WEAPON_POOLCUE_V5",
-            "WEAPON_POOLCUE_0", "WEAPON_POOLCUE_1", "WEAPON_POOLCUE_2",
-            "WEAPON_POOLCUE_3", "WEAPON_POOLCUE_4", "WEAPON_POOLCUE_5",
-            "WEAPON_POOLCUE0", "WEAPON_POOLCUE1", "WEAPON_POOLCUE2",
-            "WEAPON_POOLCUE3", "WEAPON_POOLCUE4", "WEAPON_POOLCUE5",
-            "WEAPON_POOLCUE_RENT", "WEAPON_POOLCUE14DAY", "WEAPON_POOLCUEWAR",
-            "WEAPON_POOLCUE_FREE", "WEAPON_POOLCUE_LV1", "WEAPON_POOLCUE_LV2",
-            "WEAPON_POOLCUE_LV3", "WEAPON_POOLCUE_LV4", "WEAPON_POOLCUE_LV5",
-            "WEAPON_POOLCUE_TIER0", "WEAPON_POOLCUE_TIER1", "WEAPON_POOLCUE_TIER2",
-            "WEAPON_POOLCUE_TIER3", "WEAPON_POOLCUE_BATTLE", "WEAPON_POOLCUE_NEWBIE",
-        },
-        offset = {
-            pos = { x = 0.0800, y = -0.0250, z = -0.0200 },
-            rot = { x = -85.0,  y = -16.0,   z = -23.0 },
-            bone = 57005,
-        },
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- WEAPON MAP — ครอบคลุมทุกไม้/อาวุธ
+-- ═══════════════════════════════════════════════════════════════════════════════
+local WEAPON_MAP = {
+    poolcue = {
+        GetHashKey('WEAPON_POOLCUE'), GetHashKey('WEAPON_POOLCUE_0'), GetHashKey('WEAPON_POOLCUE_1'),
+        GetHashKey('WEAPON_POOLCUE_2'), GetHashKey('WEAPON_POOLCUE_3'), GetHashKey('WEAPON_POOLCUE_4'),
+        GetHashKey('WEAPON_POOLCUE_5'), GetHashKey('WEAPON_POOLCUE0'), GetHashKey('WEAPON_POOLCUE1'),
+        GetHashKey('WEAPON_POOLCUE2'), GetHashKey('WEAPON_POOLCUE3'), GetHashKey('WEAPON_POOLCUE4'),
+        GetHashKey('WEAPON_POOLCUE5'), GetHashKey('WEAPON_POOLCUE_RENT'), GetHashKey('WEAPON_POOLCUE14DAY'),
+        GetHashKey('WEAPON_POOLCUEWAR'),
     },
-    ["BOTTLE"] = {
-        names = {
-            "WEAPON_BOTTLE", "WEAPON_BOTTLE_V1", "WEAPON_BOTTLE_V2",
-            "WEAPON_BOTTLE_V3", "WEAPON_BOTTLE_V4", "WEAPON_BOTTLE_V5",
-            "WEAPON_BOTTLE_0", "WEAPON_BOTTLE_1", "WEAPON_BOTTLE_2",
-            "WEAPON_BOTTLE_3", "WEAPON_BOTTLE_4", "WEAPON_BOTTLE_5",
-            "WEAPON_BOTTLE0", "WEAPON_BOTTLE1", "WEAPON_BOTTLE2",
-            "WEAPON_BOTTLE3", "WEAPON_BOTTLE4", "WEAPON_BOTTLE5",
-            "WEAPON_BOTTLE_RENT", "WEAPON_BOTTLE14DAY", "WEAPON_BOTTLEWAR",
-            "WEAPON_BOTTLE_NEWBIE", "WEAPON_BOTTLE_LV1", "WEAPON_BOTTLE_LV2",
-            "WEAPON_BOTTLE_LV3", "WEAPON_BOTTLE_LV4", "WEAPON_BOTTLE_LV5",
-            "WEAPON_BOTTLE_REAL",
-        },
-        offset = {
-            pos = { x = 0.0850, y = 0.0000,  z = -0.0150 },
-            rot = { x = -86.0,  y = 9.0,     z = -20.0 },
-            bone = 57005,
-        },
+    bottle = {
+        GetHashKey('WEAPON_BOTTLE'), GetHashKey('WEAPON_BOTTLE_0'), GetHashKey('WEAPON_BOTTLE_1'),
+        GetHashKey('WEAPON_BOTTLE_2'), GetHashKey('WEAPON_BOTTLE_3'), GetHashKey('WEAPON_BOTTLE_4'),
+        GetHashKey('WEAPON_BOTTLE_5'), GetHashKey('WEAPON_BOTTLE0'), GetHashKey('WEAPON_BOTTLE1'),
+        GetHashKey('WEAPON_BOTTLE2'), GetHashKey('WEAPON_BOTTLE3'), GetHashKey('WEAPON_BOTTLE4'),
+        GetHashKey('WEAPON_BOTTLE5'),
     },
-}
-
-local WEAPON_HASH_MAP = {}
-for wType, conf in pairs(WEAPON_CONFIG) do
-    for _, name in ipairs(conf.names) do
-        WEAPON_HASH_MAP[GetHashKey(name)] = wType
-    end
-end
-
-local function getWeaponType(wHash)
-    return WEAPON_HASH_MAP[wHash]
-end
-
--- ── Skin Database: skin_id → { weapon, model, name, ptfx, kill } ──
-local SKINS = {
-    -- ── POOLCUE SKINS ──
-    ["aqua_skin_1"] = {
-        weapon = "POOLCUE",
-        model = "weapon_promote_1",
-        name = "Aqua Skin Di wa",
-        ptfx = { dict = "weapon_event_effect", eff = "weapon_event_b1", freq = 1500, bone = 28422, scale = 0.3 },
-        kill = { dict = "weapon_event_particle", eff = "weapon_event_particleb1", scale = 1.5 },
+    knife = {
+        GetHashKey('WEAPON_KNIFE'), GetHashKey('WEAPON_KNIFE_1'), GetHashKey('WEAPON_KNIFE_2'),
+        GetHashKey('WEAPON_KNIFE_3'), GetHashKey('WEAPON_KNIFE_4'),
+        GetHashKey('WEAPON_SWITCHBLADE'),
     },
-    ["weapon_lz_halloween_pool_lv1"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool",
-        name = "HW Poolcue (NT) Lv1",
+    dagger = {
+        GetHashKey('WEAPON_DAGGER'), GetHashKey('WEAPON_DAGGER_0'), GetHashKey('WEAPON_DAGGER_1'),
+        GetHashKey('WEAPON_DAGGER_2'),
     },
-    ["weapon_lz_halloween_pool_lv2"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool",
-        name = "HW Poolcue (NT) Lv2",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx", freq = 1500, bone = 28422, scale = 0.7 },
+    knuckle = {
+        GetHashKey('WEAPON_KNUCKLEDUSTER'), GetHashKey('WEAPON_KNUCKLE'),
+        GetHashKey('WEAPON_KNUCKLE_0'), GetHashKey('WEAPON_KNUCKLE_1'),
+        GetHashKey('WEAPON_KNUCKLE_2'), GetHashKey('WEAPON_KNUCKLE_3'),
     },
-    ["weapon_lz_halloween_pool_lv3"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool",
-        name = "HW Poolcue (NT) Lv3",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx", freq = 1500, bone = 28422, scale = 0.7 },
-        kill = { dict = "lz_halloween_fx", eff = "halloween_hit", scale = 1.0 },
+    machete = {
+        GetHashKey('WEAPON_MACHETE'), GetHashKey('WEAPON_MACHETE_0'),
+        GetHashKey('WEAPON_MACHETE_1'), GetHashKey('WEAPON_MACHETE_2'),
+        GetHashKey('WEAPON_MACHETE_3'), GetHashKey('WEAPON_MACHETTE_0'),
+        GetHashKey('WEAPON_MACHETTE_1'), GetHashKey('WEAPON_MACHETTE_2'),
+        GetHashKey('WEAPON_MACHETTE_3'),
     },
-    ["weapon_lz_halloween_pool_pink_lv1"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool_pink",
-        name = "HW Pink Poolcue (NT) Lv1",
+    bat = {
+        GetHashKey('WEAPON_BAT'), GetHashKey('WEAPON_BAT_0'), GetHashKey('WEAPON_BAT_1'),
+        GetHashKey('WEAPON_BAT_2'), GetHashKey('WEAPON_BAT_3'),
     },
-    ["weapon_lz_halloween_pool_pink_lv2"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool_pink",
-        name = "HW Pink Poolcue (NT) Lv2",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx_pink", freq = 1500, bone = 28422, scale = 0.7 },
-    },
-    ["weapon_lz_halloween_pool_pink_lv3"] = {
-        weapon = "POOLCUE",
-        model = "lz_halloween_pool_pink",
-        name = "HW Pink Poolcue (NT) Lv3",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx_pink", freq = 1500, bone = 28422, scale = 0.7 },
-        kill = { dict = "lz_halloween_fx", eff = "halloween_hit_pink", scale = 1.0 },
-    },
-
-    -- ── BOTTLE SKINS ──
-    ["weapon_lz_halloween_knife_lv1"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife",
-        name = "HW Bottle (NT) Lv1",
-    },
-    ["weapon_lz_halloween_knife_lv2"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife",
-        name = "HW Bottle (NT) Lv2",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx", freq = 1500, bone = 28422, scale = 0.7 },
-    },
-    ["weapon_lz_halloween_knife_lv3"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife",
-        name = "HW Bottle (NT) Lv3",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx", freq = 1500, bone = 28422, scale = 0.7 },
-        kill = { dict = "lz_halloween_fx", eff = "halloween_hit", scale = 1.0 },
-    },
-    ["weapon_lz_halloween_knife_pink_lv1"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife_pink",
-        name = "HW Pink Bottle (NT) Lv1",
-    },
-    ["weapon_lz_halloween_knife_pink_lv2"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife_pink",
-        name = "HW Pink Bottle (NT) Lv2",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx_pink", freq = 1500, bone = 28422, scale = 0.7 },
-    },
-    ["weapon_lz_halloween_knife_pink_lv3"] = {
-        weapon = "BOTTLE",
-        model = "lz_halloween_knife_pink",
-        name = "HW Pink Bottle (NT) Lv3",
-        ptfx = { dict = "lz_halloween_fx", eff = "halloween_hfx_pink", freq = 1500, bone = 28422, scale = 0.7 },
-        kill = { dict = "lz_halloween_fx", eff = "halloween_hit_pink", scale = 1.0 },
+    revolver = {
+        GetHashKey('WEAPON_REVOLVER'), GetHashKey('WEAPON_REVOLVER_0'),
+        GetHashKey('WEAPON_REVOLVER_1'), GetHashKey('WEAPON_REVOLVER_2'),
+        GetHashKey('WEAPON_REVOLVER_3'),
     },
 }
 
--- ── Shortcut Aliases ──
-local ALIASES = {
-    ["aqua"]             = "aqua_skin_1",
-    ["diwa"]             = "aqua_skin_1",
-    ["pool1"]            = "weapon_lz_halloween_pool_lv1",
-    ["pool2"]            = "weapon_lz_halloween_pool_lv2",
-    ["pool3"]            = "weapon_lz_halloween_pool_lv3",
-    ["pool_lv1"]         = "weapon_lz_halloween_pool_lv1",
-    ["pool_lv2"]         = "weapon_lz_halloween_pool_lv2",
-    ["pool_lv3"]         = "weapon_lz_halloween_pool_lv3",
-    ["pool_pink1"]       = "weapon_lz_halloween_pool_pink_lv1",
-    ["pool_pink2"]       = "weapon_lz_halloween_pool_pink_lv2",
-    ["pool_pink3"]       = "weapon_lz_halloween_pool_pink_lv3",
-    ["pool_pink_lv1"]    = "weapon_lz_halloween_pool_pink_lv1",
-    ["pool_pink_lv2"]    = "weapon_lz_halloween_pool_pink_lv2",
-    ["pool_pink_lv3"]    = "weapon_lz_halloween_pool_pink_lv3",
+local SKIN_DB = {}
+local allKnownComponentHashes = {}
 
-    ["bottle1"]          = "weapon_lz_halloween_knife_lv1",
-    ["bottle2"]          = "weapon_lz_halloween_knife_lv2",
-    ["bottle3"]          = "weapon_lz_halloween_knife_lv3",
-    ["bottle_lv1"]       = "weapon_lz_halloween_knife_lv1",
-    ["bottle_lv2"]       = "weapon_lz_halloween_knife_lv2",
-    ["bottle_lv3"]       = "weapon_lz_halloween_knife_lv3",
-    ["bottle_pink1"]     = "weapon_lz_halloween_knife_pink_lv1",
-    ["bottle_pink2"]     = "weapon_lz_halloween_knife_pink_lv2",
-    ["bottle_pink3"]     = "weapon_lz_halloween_knife_pink_lv3",
-    ["bottle_pink_lv1"]  = "weapon_lz_halloween_knife_pink_lv1",
-    ["bottle_pink_lv2"]  = "weapon_lz_halloween_knife_pink_lv2",
-    ["bottle_pink_lv3"]  = "weapon_lz_halloween_knife_pink_lv3",
-
-    ["knife1"]           = "weapon_lz_halloween_knife_lv1",
-    ["knife2"]           = "weapon_lz_halloween_knife_lv2",
-    ["knife3"]           = "weapon_lz_halloween_knife_lv3",
-    ["knife_lv1"]        = "weapon_lz_halloween_knife_lv1",
-    ["knife_lv2"]        = "weapon_lz_halloween_knife_lv2",
-    ["knife_lv3"]        = "weapon_lz_halloween_knife_lv3",
-    ["knife_pink1"]      = "weapon_lz_halloween_knife_pink_lv1",
-    ["knife_pink2"]      = "weapon_lz_halloween_knife_pink_lv2",
-    ["knife_pink3"]      = "weapon_lz_halloween_knife_pink_lv3",
-    ["knife_pink_lv1"]   = "weapon_lz_halloween_knife_pink_lv1",
-    ["knife_pink_lv2"]   = "weapon_lz_halloween_knife_pink_lv2",
-    ["knife_pink_lv3"]   = "weapon_lz_halloween_knife_pink_lv3",
-}
-
--- ── Search ──
-local function findSkin(q)
-    if not q or q == '' then return nil end
-    q = string.lower(q)
-
-    -- Check direct aliases
-    if ALIASES[q] then return ALIASES[q] end
-
-    -- Check exact match
-    for id in pairs(SKINS) do
-        if string.lower(id) == q then return id end
-    end
-    -- Check ID partial match
-    for id in pairs(SKINS) do
-        if string.find(string.lower(id), q, 1, true) then return id end
-    end
-    -- Check Name partial match
-    for id, d in pairs(SKINS) do
-        if string.find(string.lower(d.name), q, 1, true) then return id end
-    end
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- DETECT WEAPON TYPE จากชื่อสกิน
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function DetectWeaponType(skinName)
+    local lower = string.lower(skinName)
+    if lower:find("poolcue") or lower:find("pool") then return "poolcue" end
+    if lower:find("bottle") then return "bottle" end
+    if lower:find("dagger") then return "dagger" end
+    if lower:find("knife") or lower:find("switchblade") then return "knife" end
+    if lower:find("knuckle") then return "knuckle" end
+    if lower:find("machete") or lower:find("machette") then return "machete" end
+    if lower:find("bat") then return "bat" end
+    if lower:find("revolver") or lower:find("gun") then return "revolver" end
     return nil
 end
 
--- ── Prop Management ──
-local function destroyProp()
-    if propEntity and DoesEntityExist(propEntity) then
-        SetEntityAsMissionEntity(propEntity, true, true)
-        DetachEntity(propEntity, true, true)
-        DeleteEntity(propEntity)
-    end
-    propEntity = nil
-    propModelName = nil
-    currentPropType = nil
-end
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- BUILD SKIN DB — ดึงจาก Config ของ 1nfx_weaponskin เท่านั้น
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function BuildSkinDB()
+    SKIN_DB = {}
+    allKnownComponentHashes = {}
 
-local function createProp(ped, modelName, wType)
-    if propEntity and DoesEntityExist(propEntity) and propModelName == modelName and currentPropType == wType then
-        return true
+    local weaponSkinCfg = nil
+    if Config and Config['WEAPON_SKIN'] then
+        weaponSkinCfg = Config['WEAPON_SKIN']
     end
-    destroyProp()
 
-    local h = GetHashKey(modelName)
-    if not IsModelValid(h) then h = GetHashKey(string.upper(modelName)) end
-    if not IsModelValid(h) then h = GetHashKey(string.lower(modelName)) end
-    if not IsModelValid(h) then
+    if not weaponSkinCfg then
+        pcall(function()
+            local resCfg = exports[RES]:GetConfig()
+            if resCfg and resCfg['WEAPON_SKIN'] then
+                weaponSkinCfg = resCfg['WEAPON_SKIN']
+            end
+        end)
+    end
+
+    if not weaponSkinCfg then
+        print("^1[1nfx] Config['WEAPON_SKIN'] not found — waiting...^7")
         return false
     end
 
-    RequestModel(h)
-    local deadline = GetGameTimer() + 3000
-    while not HasModelLoaded(h) and GetGameTimer() < deadline do Wait(10) end
-    if not HasModelLoaded(h) then
-        return false
+    for skinName, data in pairs(weaponSkinCfg) do
+        if type(data) == 'table' then
+            local model = data.MODEL or skinName
+            local weaponType = DetectWeaponType(skinName)
+            if data.Category then
+                weaponType = string.lower(data.Category)
+                if weaponType == 'pool' then weaponType = 'poolcue' end
+            end
+
+            SKIN_DB[skinName] = {
+                model = model,
+                weaponType = weaponType,
+                label = data.SKIN_LABEL or data.label or skinName,
+            }
+
+            allKnownComponentHashes[GetHashKey(model)] = true
+            allKnownComponentHashes[GetHashKey(string.upper(model))] = true
+            allKnownComponentHashes[GetHashKey(string.lower(model))] = true
+            allKnownComponentHashes[GetHashKey("COMPONENT_" .. string.upper(model))] = true
+        end
     end
 
-    local c = GetEntityCoords(ped)
-    local obj = CreateObject(h, c.x, c.y, c.z, true, true, false)
-    if not DoesEntityExist(obj) then return false end
-
-    SetEntityCompletelyDisableCollision(obj, false, false)
-    local conf = WEAPON_CONFIG[wType] or WEAPON_CONFIG["POOLCUE"]
-    local bi = GetPedBoneIndex(ped, conf.offset.bone)
-    AttachEntityToEntity(
-        obj, ped, bi,
-        conf.offset.pos.x, conf.offset.pos.y, conf.offset.pos.z,
-        conf.offset.rot.x, conf.offset.rot.y, conf.offset.rot.z,
-        true, false, false, false, 0, true
-    )
-
-    propEntity = obj
-    propModelName = modelName
-    currentPropType = wType
-    SetModelAsNoLongerNeeded(h)
+    print(("^2[1nfx] Loaded %d skins from Config^7"):format(0 + (function() local c=0 for _ in pairs(SKIN_DB) do c=c+1 end return c end)()))
     return true
 end
 
--- ── PTFX ──
-local function loadDict(dict)
-    if not dict or dict == '' then return false end
-    if HasNamedPtfxAssetLoaded(dict) then return true end
-    RequestNamedPtfxAsset(dict)
-    local d = GetGameTimer() + 500
-    while not HasNamedPtfxAssetLoaded(dict) and GetGameTimer() < d do Wait(0) end
-    return HasNamedPtfxAssetLoaded(dict)
-end
-
-local function playHandFx(ped, fx)
-    if not fx or not fx.dict or not fx.eff then return end
-    if loadDict(fx.dict) then
-        local bi = GetPedBoneIndex(ped, fx.bone or 28422)
-        UseParticleFxAsset(fx.dict)
-        StartParticleFxNonLoopedOnPedBone(
-            fx.eff, ped,
-            0.10, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            bi, fx.scale or 0.5,
-            false, false, false
-        )
-    end
-end
-
-local function playKillFx(victim, kfx)
-    if not kfx or not kfx.dict or not kfx.eff then return end
-    if loadDict(kfx.dict) then
-        local pos = GetEntityCoords(victim)
-        local headBone = GetPedBoneIndex(victim, 31086)
-        local tx, ty, tz = pos.x, pos.y, pos.z + 0.8
-        if headBone ~= -1 then
-            local bp = GetWorldPositionOfEntityBone(victim, headBone)
-            if bp and bp.z > 0.0 then tx, ty, tz = bp.x, bp.y, bp.z end
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- HELPERS
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function GetCurrentWeaponType(weaponHash)
+    for wType, hashes in pairs(WEAPON_MAP) do
+        for _, h in ipairs(hashes) do
+            if h == weaponHash then return wType end
         end
-        UseParticleFxAsset(kfx.dict)
-        StartParticleFxNonLoopedAtCoord(kfx.eff, tx, ty, tz, 0.0, 90.0, 0.0, kfx.scale or 1.0, false, false, false)
     end
-end
-
--- ── Active Skin Check ──
-local function hasAnyActiveSkin()
-    return (activeSkins["POOLCUE"] ~= nil) or (activeSkins["BOTTLE"] ~= nil)
-end
-
--- ── Main Loop ──
-local function startLoop()
-    if loopRunning then return end
-    loopRunning = true
-    CreateThread(function()
-        local lastW = 0
-        local nextFx = 0
-        while loopRunning and hasAnyActiveSkin() do
-            local ped = PlayerPedId()
-            local w = GetSelectedPedWeapon(ped)
-            local wType = getWeaponType(w)
-            local curSkinId = wType and activeSkins[wType]
-            local sk = curSkinId and SKINS[curSkinId]
-
-            if sk and not IsEntityDead(ped) then
-                -- สร้าง prop เมื่อเปลี่ยนอาวุธ หรือ prop หาย หรือ เปลี่ยน model
-                if w ~= lastW or not propEntity or not DoesEntityExist(propEntity) or propModelName ~= sk.model or currentPropType ~= wType then
-                    createProp(ped, sk.model, wType)
-                    lastW = w
-                end
-
-                -- ซ่อนอาวุธเดิม
-                local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-                if wEnt ~= 0 and DoesEntityExist(wEnt) then
-                    SetEntityVisible(wEnt, false, false)
-                end
-
-                -- Hand PTFX
-                if sk.ptfx then
-                    local now = GetGameTimer()
-                    if now >= nextFx then
-                        playHandFx(ped, sk.ptfx)
-                        nextFx = now + (sk.ptfx.freq or 1500)
-                    end
-                end
-            else
-                if lastW ~= 0 then
-                    destroyProp()
-                    -- คืนค่าอาวุธให้เห็น
-                    local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-                    if wEnt ~= 0 and DoesEntityExist(wEnt) then
-                        SetEntityVisible(wEnt, true, false)
-                    end
-                    lastW = 0
-                end
-            end
-            Wait(0)
-        end
-        destroyProp()
-        loopRunning = false
-    end)
-end
-
--- ── Damage Handler ──
-local function startDmg()
-    if dmgReady then return end
-    dmgReady = true
-    AddEventHandler('gameEventTriggered', function(ev, data)
-        if ev ~= 'CEventNetworkEntityDamage' then return end
-        local victim = data[1]
-        local attacker = data[2]
-        local myPed = PlayerPedId()
-        if attacker ~= myPed or victim == myPed or not victim then return end
-        if not (IsEntityDead(victim) or IsPedDeadOrDying(victim, true) or GetEntityHealth(victim) <= 0) then return end
-
-        local w = GetSelectedPedWeapon(myPed)
-        local wType = getWeaponType(w)
-        if not wType or not activeSkins[wType] then return end
-
-        local sk = SKINS[activeSkins[wType]]
-        if not sk or not sk.kill then return end
-
-        local now = GetGameTimer()
-        if now - lastKill < 3000 then return end
-        lastKill = now
-        playKillFx(victim, sk.kill)
-    end)
-end
-
--- ── KVP Storage ──
-local function saveKVP(wType, id)
-    SetResourceKvp(('aqua_bypass_skin_%s'):format(string.lower(wType)), id or '')
-end
-
-local function loadKVP(wType)
-    local v = GetResourceKvpString(('aqua_bypass_skin_%s'):format(string.lower(wType)))
-    if v and v ~= '' then return v end
     return nil
 end
 
--- ── Init ──
+local function GetAllWeaponHashes()
+    local all = {}
+    for _, hashes in pairs(WEAPON_MAP) do
+        for _, h in ipairs(hashes) do
+            all[h] = true
+        end
+    end
+    return all
+end
+
+local function FindSkin(query)
+    if not query or query == '' then return nil, nil end
+    local q = string.lower(query)
+    if SKIN_DB[query] then return query, SKIN_DB[query] end
+    for k, v in pairs(SKIN_DB) do
+        if string.lower(k) == q then return k, v end
+    end
+    for k, v in pairs(SKIN_DB) do
+        if v.label and string.lower(v.label) == q then return k, v end
+    end
+    for k, v in pairs(SKIN_DB) do
+        if string.find(string.lower(k), q, 1, true) then return k, v end
+        if v.label and string.find(string.lower(v.label), q, 1, true) then return k, v end
+    end
+    return nil, nil
+end
+
+local function GetSkinCfg(skinName)
+    if Config and Config['WEAPON_SKIN'] and Config['WEAPON_SKIN'][skinName] then
+        return Config['WEAPON_SKIN'][skinName]
+    end
+    return nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- PROP ATTACH ENGINE
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function RemoveSkinProp()
+    if currentPropEntity and DoesEntityExist(currentPropEntity) then
+        SetEntityAsMissionEntity(currentPropEntity, true, true)
+        DetachEntity(currentPropEntity, true, true)
+        DeleteEntity(currentPropEntity)
+    end
+    currentPropEntity = nil
+    currentPropModel = nil
+    SetPedCurrentWeaponVisible(PlayerPedId(), true, false, false, false)
+end
+
+local function AttachSkinProp(ped, modelName)
+    if currentPropEntity and DoesEntityExist(currentPropEntity) and currentPropModel == modelName then
+        SetPedCurrentWeaponVisible(ped, false, false, false, false)
+        return true
+    end
+    RemoveSkinProp()
+
+    local modelHash = GetHashKey(modelName)
+    if not IsModelValid(modelHash) then modelHash = GetHashKey(string.lower(modelName)) end
+    if not IsModelValid(modelHash) then modelHash = GetHashKey(string.upper(modelName)) end
+    if not IsModelValid(modelHash) then return false end
+
+    RequestModel(modelHash)
+    local deadline = GetGameTimer() + 800
+    while not HasModelLoaded(modelHash) and GetGameTimer() < deadline do Wait(10) end
+    if not HasModelLoaded(modelHash) then return false end
+
+    local pCoords = GetEntityCoords(ped)
+    local prop = CreateObject(modelHash, pCoords.x, pCoords.y, pCoords.z, true, true, false)
+    if not DoesEntityExist(prop) then return false end
+
+    SetEntityCollision(prop, false, false)
+    SetEntityInvincible(prop, true)
+
+    local px, py, pz = 0.055, 0.045, 0.01
+    local rx, ry, rz = -77.0, -23.0, -16.0
+    local boneId = 28422
+
+    if Config and Config.WeaponPosition then
+        local posCfg = Config.WeaponPosition['POOL'] or Config.WeaponPosition['POOLCUE']
+        if posCfg then
+            px = (posCfg.Pos and posCfg.Pos.x) or px
+            py = (posCfg.Pos and posCfg.Pos.y) or py
+            pz = (posCfg.Pos and posCfg.Pos.z) or pz
+            rx = (posCfg.Rot and posCfg.Rot.x) or rx
+            ry = (posCfg.Rot and posCfg.Rot.y) or ry
+            rz = (posCfg.Rot and posCfg.Rot.z) or rz
+        end
+    end
+
+    local boneIndex = GetPedBoneIndex(ped, boneId)
+    AttachEntityToEntity(prop, ped, boneIndex, px, py, pz, rx, ry, rz, true, true, false, true, 0, true)
+
+    currentPropEntity = prop
+    currentPropModel = modelName
+    SetModelAsNoLongerNeeded(modelHash)
+    SetPedCurrentWeaponVisible(ped, false, false, false, false)
+    return true
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- APPLY / REMOVE SKIN (Component + Prop hybrid) — ใช้ได้ทุกไม้
+-- ═══════════════════════════════════════════════════════════════════════════════
+local origHasPedGot = HasPedGotWeaponComponent
+local origRemoveComponent = RemoveWeaponComponentFromPed
+local origTSE = TriggerServerEvent
+
+local function RemoveAllSkinComponents(ped, weaponHash)
+    if not ped or not DoesEntityExist(ped) or weaponHash == 0 then return end
+    for compHash in pairs(allKnownComponentHashes) do
+        if origHasPedGot(ped, weaponHash, compHash) then
+            origRemoveComponent(ped, weaponHash, compHash)
+        end
+    end
+end
+
+local function ApplySkin(skinName)
+    local ped = PlayerPedId()
+    local currentWeapon = GetSelectedPedWeapon(ped)
+    if currentWeapon == GetHashKey('WEAPON_UNARMED') or currentWeapon == 0 then return false end
+
+    local data = SKIN_DB[skinName]
+    local modelName = (data and data.model) or skinName
+
+    RemoveAllSkinComponents(ped, currentWeapon)
+
+    local skinHash = GetHashKey(modelName)
+    local upperHash = GetHashKey(string.upper(modelName))
+    local compHash = GetHashKey("COMPONENT_" .. string.upper(modelName))
+
+    GiveWeaponComponentToPed(ped, currentWeapon, skinHash)
+    GiveWeaponComponentToPed(ped, currentWeapon, upperHash)
+    GiveWeaponComponentToPed(ped, currentWeapon, compHash)
+
+    local isComp = origHasPedGot(ped, currentWeapon, skinHash)
+              or origHasPedGot(ped, currentWeapon, upperHash)
+              or origHasPedGot(ped, currentWeapon, compHash)
+
+    if isComp then
+        RemoveSkinProp()
+    else
+        AttachSkinProp(ped, modelName)
+    end
+
+    equippedOnWeapon = currentWeapon
+    return true
+end
+
+local function RemoveSkin()
+    if selectedSkin and equippedOnWeapon then
+        RemoveAllSkinComponents(PlayerPedId(), equippedOnWeapon)
+    end
+    RemoveSkinProp()
+    equippedOnWeapon = nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- PTFX
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function EnsurePtfxLoaded(dict)
+    if not dict or dict == '' then return false end
+    if HasNamedPtfxAssetLoaded(dict) then return true end
+    RequestNamedPtfxAsset(dict)
+    local deadline = GetGameTimer() + 500
+    while not HasNamedPtfxAssetLoaded(dict) and GetGameTimer() < deadline do Wait(0) end
+    return HasNamedPtfxAssetLoaded(dict)
+end
+
+local function StopHandFx() handFxLoopActive = false end
+
+local function StartHandFx(skinName)
+    StopHandFx()
+    local cfg = GetSkinCfg(skinName)
+    if not cfg or not cfg.PTFX_ATTACH_BONE then return end
+
+    local fxList = cfg.PTFX_ATTACH_BONE
+    if not fxList or #fxList == 0 then return end
+
+    handFxLoopActive = true
+    for _, fx in ipairs(fxList) do
+        CreateThread(function()
+            while handFxLoopActive and active do
+                local ped = PlayerPedId()
+                if GetSelectedPedWeapon(ped) == GetHashKey('WEAPON_UNARMED') then
+                    Wait(500)
+                else
+                    local dict = fx.Dict or fx.dict
+                    local eff = fx.Eff or fx.eff
+                    local bone = fx.Bone or fx.bone or 57005
+                    local scale = fx.Scale or fx.scale or 1.0
+
+                    if dict and eff and EnsurePtfxLoaded(dict) then
+                        UseParticleFxAsset(dict)
+                        StartParticleFxNonLoopedOnPedBone(
+                            eff, ped,
+                            fx.xPos or 0.12, fx.yPos or 0.0, fx.zPos or 0.0,
+                            fx.xRot or 0.0, fx.yRot or 0.0, fx.zRot or 65.0,
+                            bone, scale, false, false, false
+                        )
+                    end
+                    Wait(fx.Time or fx.time or 800)
+                end
+            end
+        end)
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- KILL / HIT EFFECTS
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function PlayKillEffect(victimPed, skinName)
+    local now = GetGameTimer()
+    local effDelay = (Config and Config['GENERAL'] and Config['GENERAL'].EFF_DELAY) or 3000
+    if now - lastEffectTime < effDelay then return end
+    lastEffectTime = now
+
+    local cfg = GetSkinCfg(skinName)
+    if not cfg then return end
+
+    if cfg.EFF_CRITICAL_DEAD then
+        local pos = GetEntityCoords(victimPed)
+        local headBone = GetPedBoneIndex(victimPed, 31086)
+        local targetPos = pos + vector3(0.0, 0.0, 0.65)
+        if headBone ~= -1 then
+            local bPos = GetWorldPositionOfEntityBone(victimPed, headBone)
+            if bPos and #(bPos - pos) < 3.0 and bPos.z > 0.0 then targetPos = bPos end
+        end
+
+        for _, ptfx in ipairs(cfg.EFF_CRITICAL_DEAD) do
+            local dict = ptfx.DICT or ptfx.dict
+            local eff = ptfx.EFF or ptfx.eff
+            local scale = ptfx.SCALE or ptfx.scale or 1.0
+            if dict and eff and EnsurePtfxLoaded(dict) then
+                UseParticleFxAsset(dict)
+                StartParticleFxNonLoopedAtCoord(eff, targetPos.x, targetPos.y, targetPos.z, 0.0, 0.0, 0.0, scale, false, false, false)
+                UseParticleFxAsset(dict)
+                StartNetworkedParticleFxNonLoopedAtCoord(eff, targetPos.x, targetPos.y, targetPos.z, 0.0, 0.0, 0.0, scale, false, false, false)
+            end
+        end
+    end
+
+    if cfg.SCREEN and cfg.SCREEN.SCREEN_NAME and cfg.SCREEN.SCREEN_NAME ~= '' then
+        local screenTime = (Config and Config['GENERAL'] and Config['GENERAL'].SCREEN_TIME) or 3000
+        SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = cfg.SCREEN.SCREEN_NAME, time = screenTime })
+    end
+
+    local audioData = cfg.AUDIO_CRITICAL_DEAD
+    if not audioData or not audioData.AUDIO_NAME or audioData.AUDIO_NAME == '' then
+        audioData = cfg.AUDIO_HIT
+    end
+    if audioData and audioData.AUDIO_NAME and audioData.AUDIO_NAME ~= '' then
+        SendNUIMessage({ action = 'PLAY_SOUND', sound = audioData.AUDIO_NAME, volume = tonumber(audioData.AUDIO_VOLUME) or 0.5 })
+    end
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- DAMAGE HANDLER
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function RegisterDamageHandler()
+    if damageRegistered then return end
+    damageRegistered = true
+
+    AddEventHandler("gameEventTriggered", function(eventName, eventData)
+        if not active or not selectedSkin then return end
+        if eventName ~= "CEventNetworkEntityDamage" then return end
+
+        local victim = eventData[1]
+        local attacker = eventData[2]
+        local isDead = eventData[4]
+        local ped = PlayerPedId()
+
+        if attacker ~= ped or victim == ped then return end
+
+        if isDead == 1 or IsEntityDead(victim) or IsPedDeadOrDying(victim, true) then
+            PlayKillEffect(victim, selectedSkin)
+        end
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- AUTO EQUIP — ทำงานกับทุกไม้ที่ตรง weaponType
+-- ═══════════════════════════════════════════════════════════════════════════════
+local function StartAutoEquip()
+    if autoEquipActive then return end
+    autoEquipActive = true
+    CreateThread(function()
+        while autoEquipActive and active do
+            local ped = PlayerPedId()
+            local currentWeapon = GetSelectedPedWeapon(ped)
+            if selectedSkin and currentWeapon ~= GetHashKey('WEAPON_UNARMED') and currentWeapon ~= 0 then
+                local skinData = SKIN_DB[selectedSkin]
+                if skinData then
+                    local currentType = GetCurrentWeaponType(currentWeapon)
+                    local skinType = skinData.weaponType
+                    local match = (skinType == currentType)
+                    if not match and not skinType then match = true end
+
+                    if match then
+                        local modelName = skinData.model or selectedSkin
+                        local skinHash = GetHashKey(modelName)
+                        if not origHasPedGot(ped, currentWeapon, skinHash) then
+                            if not (currentPropEntity and DoesEntityExist(currentPropEntity) and currentPropModel == modelName) then
+                                ApplySkin(selectedSkin)
+                            end
+                        end
+                        if currentPropEntity and DoesEntityExist(currentPropEntity) then
+                            SetPedCurrentWeaponVisible(ped, false, false, false, false)
+                        end
+                    end
+                end
+            end
+            Wait(150)
+        end
+        autoEquipActive = false
+    end)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- ANTI-DETECT HOOKS
+-- ═══════════════════════════════════════════════════════════════════════════════
+TriggerServerEvent = function(eventName, ...)
+    if active and type(eventName) == "string" then
+        local lower = string.lower(eventName)
+        if lower:find("1nfx") or lower:find("weaponskin") then
+            if lower:find("report") or lower:find("guard") or lower:find("detect")
+                or lower:find("kick") or lower:find("cheat") or lower:find("check")
+                or lower:find("log") or lower:find("ban") or lower:find("verify")
+                or lower:find("anticheat") or lower:find("validate") or lower:find("security") then
+                return
+            end
+        end
+    end
+    return origTSE(eventName, ...)
+end
+
+RemoveWeaponComponentFromPed = function(ped, weapon, component)
+    if active and selectedSkin then
+        local modelName = (SKIN_DB[selectedSkin] and SKIN_DB[selectedSkin].model) or selectedSkin
+        local h1 = GetHashKey(modelName)
+        local h2 = GetHashKey(string.upper(modelName))
+        local h3 = GetHashKey("COMPONENT_" .. string.upper(modelName))
+        if component == h1 or component == h2 or component == h3 then return end
+    end
+    return origRemoveComponent(ped, weapon, component)
+end
+
+HasPedGotWeaponComponent = function(ped, weapon, component)
+    if active and selectedSkin then
+        local modelName = (SKIN_DB[selectedSkin] and SKIN_DB[selectedSkin].model) or selectedSkin
+        local h1 = GetHashKey(modelName)
+        local h2 = GetHashKey(string.upper(modelName))
+        local h3 = GetHashKey("COMPONENT_" .. string.upper(modelName))
+        if ped == PlayerPedId() and (component == h1 or component == h2 or component == h3) then
+            return true
+        end
+    end
+    return origHasPedGot(ped, weapon, component)
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- KVP SAVE / LOAD
+-- ═══════════════════════════════════════════════════════════════════════════════
+local KVP_KEY = "1nfx_saved_skin"
+
+local function SaveSkinKVP(skinName)
+    if skinName and skinName ~= '' then
+        SetResourceKvp(KVP_KEY, skinName)
+    else
+        DeleteResourceKvp(KVP_KEY)
+    end
+end
+
+local function LoadSkinKVP()
+    local val = GetResourceKvpString(KVP_KEY)
+    if val and val ~= '' then return val end
+    return nil
+end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- INIT — รอ Config โหลดแล้วสร้าง DB
+-- ═══════════════════════════════════════════════════════════════════════════════
 CreateThread(function()
-    Wait(3000)
-
-    -- Auto-load Poolcue
-    local savedPool = loadKVP("POOLCUE")
-    if not savedPool then
-        local legacy = GetResourceKvpString('aqua_bypass_skin')
-        if legacy and legacy ~= '' and SKINS[legacy] and SKINS[legacy].weapon == "POOLCUE" then
-            savedPool = legacy
-        end
-    end
-    if savedPool and SKINS[savedPool] then
-        activeSkins["POOLCUE"] = savedPool
+    local attempts = 0
+    while attempts < 30 do
+        Wait(1000)
+        attempts = attempts + 1
+        if BuildSkinDB() then break end
     end
 
-    -- Auto-load Bottle
-    local savedBottle = loadKVP("BOTTLE")
-    if not savedBottle then
-        local legacy = GetResourceKvpString('aqua_bypass_skin')
-        if legacy and legacy ~= '' and SKINS[legacy] and SKINS[legacy].weapon == "BOTTLE" then
-            savedBottle = legacy
-        end
-    end
-    if savedBottle and SKINS[savedBottle] then
-        activeSkins["BOTTLE"] = savedBottle
+    if next(SKIN_DB) == nil then
+        print("^1[1nfx] Could not load Config after 30s^7")
+        return
     end
 
-    if hasAnyActiveSkin() then
-        startLoop()
-        startDmg()
+    local saved = LoadSkinKVP()
+    if saved and SKIN_DB[saved] then
+        selectedSkin = saved
+        selectedSkinCfg = GetSkinCfg(saved)
+        active = true
+        StartAutoEquip()
+        StartHandFx(saved)
+        RegisterDamageHandler()
+        print(("^2[1nfx] Auto-loaded saved skin: %s^7"):format(saved))
     end
 end)
 
--- ── Commands ──
+AddEventHandler('onResourceStop', function(resName)
+    if resName == GetCurrentResourceName() then
+        RemoveSkinProp()
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+-- COMMANDS
+-- ═══════════════════════════════════════════════════════════════════════════════
+
 RegisterCommand('home', function(_, args)
+    BuildSkinDB()
+
     if #args < 1 then
+        print("^1[1nfx] Usage: /home <skinname>^7")
         return
     end
 
-    local input = table.concat(args, " ")
-    local lowerInput = string.lower(input)
+    RemoveSkin()
+    StopHandFx()
 
-    -- ถอดสกินทั้งหมด หรือ ถอดแยกอาวุธ
-    if lowerInput == 'off' or lowerInput == 'remove' then
-        destroyProp()
-        activeSkins["POOLCUE"] = nil
-        activeSkins["BOTTLE"] = nil
-        saveKVP("POOLCUE", '')
-        saveKVP("BOTTLE", '')
-        SetResourceKvp('aqua_bypass_skin', '')
-        local ped = PlayerPedId()
-        local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-        if wEnt ~= 0 and DoesEntityExist(wEnt) then
-            SetEntityVisible(wEnt, true, false)
-        end
-        return
-    elseif lowerInput == 'off poolcue' or lowerInput == 'poolcue off' or lowerInput == 'off pool' or lowerInput == 'pool off' then
-        activeSkins["POOLCUE"] = nil
-        saveKVP("POOLCUE", '')
-        destroyProp()
-        return
-    elseif lowerInput == 'off bottle' or lowerInput == 'bottle off' or lowerInput == 'off knife' or lowerInput == 'knife off' then
-        activeSkins["BOTTLE"] = nil
-        saveKVP("BOTTLE", '')
-        destroyProp()
+    local skinKey, skinData = FindSkin(args[1])
+    if not skinKey then
+        print(("^1[1nfx] Skin not found: '%s' — use /homelist^7"):format(args[1]))
         return
     end
 
-    local id = findSkin(input)
-    if not id then
-        return
-    end
+    selectedSkin = skinKey
+    selectedSkinCfg = GetSkinCfg(skinKey)
+    active = true
 
-    local sk = SKINS[id]
-    local wType = sk.weapon or "POOLCUE"
+    ApplySkin(skinKey)
+    StartAutoEquip()
+    StartHandFx(skinKey)
+    RegisterDamageHandler()
+    SaveSkinKVP(skinKey)
 
-    activeSkins[wType] = id
-    saveKVP(wType, id)
-    SetResourceKvp('aqua_bypass_skin', id)
-
-    local ped = PlayerPedId()
-    local w = GetSelectedPedWeapon(ped)
-    if getWeaponType(w) == wType then
-        destroyProp()
-        createProp(ped, sk.model, wType)
-        local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-        if wEnt ~= 0 and DoesEntityExist(wEnt) then
-            SetEntityVisible(wEnt, false, false)
-        end
-    end
-
-    startLoop()
-    startDmg()
+    print(("^2[1nfx] Equipped: %s (%s)^7"):format(skinData.label or skinKey, skinKey))
 end, false)
 
-RegisterCommand('homeoff', function(_, args)
-    local target = args[1] and string.lower(args[1])
-    if target == 'poolcue' or target == 'pool' then
-        activeSkins["POOLCUE"] = nil
-        saveKVP("POOLCUE", '')
-        destroyProp()
-        return
-    elseif target == 'bottle' or target == 'knife' then
-        activeSkins["BOTTLE"] = nil
-        saveKVP("BOTTLE", '')
-        destroyProp()
-        return
-    end
-
-    destroyProp()
-    activeSkins["POOLCUE"] = nil
-    activeSkins["BOTTLE"] = nil
-    saveKVP("POOLCUE", '')
-    saveKVP("BOTTLE", '')
-    SetResourceKvp('aqua_bypass_skin', '')
-    local ped = PlayerPedId()
-    local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-    if wEnt ~= 0 and DoesEntityExist(wEnt) then
-        SetEntityVisible(wEnt, true, false)
-    end
+RegisterCommand('homeoff', function()
+    RemoveSkin()
+    StopHandFx()
+    selectedSkin = nil
+    selectedSkinCfg = nil
+    active = false
+    autoEquipActive = false
+    SaveSkinKVP(nil)
+    print("^1[1nfx] Skin removed.^7")
 end, false)
 
 RegisterCommand('homelist', function()
-    local poolList = {}
-    local bottleList = {}
-    for id, s in pairs(SKINS) do
-        if s.weapon == "POOLCUE" then poolList[#poolList+1] = id
-        elseif s.weapon == "BOTTLE" then bottleList[#bottleList+1] = id end
+    BuildSkinDB()
+
+    local categories = {}
+    for skinName, data in pairs(SKIN_DB) do
+        local cat = data.weaponType or 'other'
+        if not categories[cat] then categories[cat] = {} end
+        categories[cat][#categories[cat] + 1] = { name = skinName, label = data.label or skinName }
     end
-    table.sort(poolList)
-    table.sort(bottleList)
-    TriggerEvent('chat:addMessage', { args = { "^2=== AQUA WEAPON SKINS ===" } })
-    TriggerEvent('chat:addMessage', { args = { "^3[POOLCUE]" } })
-    for _, id in ipairs(poolList) do
-        local s = SKINS[id]
-        local mark = (id == activeSkins["POOLCUE"]) and " ^2<< ACTIVE" or ""
-        local fx = (s.ptfx and "+HAND " or "") .. (s.kill and "+KILL " or "")
-        TriggerEvent('chat:addMessage', { args = { ("  ^6%s ^7(%s) %s%s"):format(id, s.model, fx, mark) } })
+
+    local order = { 'poolcue', 'bottle', 'knife', 'dagger', 'knuckle', 'machete', 'bat', 'revolver', 'other' }
+    local catLabels = {
+        poolcue = 'POOLCUE', bottle = 'BOTTLE', knife = 'KNIFE',
+        dagger = 'DAGGER', knuckle = 'KNUCKLE', machete = 'MACHETE',
+        bat = 'BAT', revolver = 'REVOLVER', other = 'OTHER',
+    }
+
+    local total = 0
+    for _ in pairs(SKIN_DB) do total = total + 1 end
+
+    print(("^3═══════════════ [1nfx WEAPON SKINS] (%d) ═══════════════^7"):format(total))
+    for _, cat in ipairs(order) do
+        local skins = categories[cat]
+        if skins and #skins > 0 then
+            table.sort(skins, function(a, b) return a.name < b.name end)
+            print(("^3── %s (%d) ──^7"):format(catLabels[cat] or cat, #skins))
+            for _, s in ipairs(skins) do
+                local marker = (s.name == selectedSkin) and " ^2<< EQUIPPED^7" or ""
+                local cfg = GetSkinCfg(s.name)
+                local hasFx = (cfg and cfg.PTFX_ATTACH_BONE and #cfg.PTFX_ATTACH_BONE > 0) and "^6+HAND^7 " or ""
+                local hasKill = (cfg and cfg.EFF_CRITICAL_DEAD and #cfg.EFF_CRITICAL_DEAD > 0) and "^1+KILL^7 " or ""
+                print(("  ^7/home ^6%s^7  (%s) %s%s%s"):format(s.name, s.label, hasFx, hasKill, marker))
+            end
+        end
     end
-    TriggerEvent('chat:addMessage', { args = { "^3[BOTTLE]" } })
-    for _, id in ipairs(bottleList) do
-        local s = SKINS[id]
-        local mark = (id == activeSkins["BOTTLE"]) and " ^2<< ACTIVE" or ""
-        local fx = (s.ptfx and "+HAND " or "") .. (s.kill and "+KILL " or "")
-        TriggerEvent('chat:addMessage', { args = { ("  ^6%s ^7(%s) %s%s"):format(id, s.model, fx, mark) } })
-    end
+    print("^3═══════════════════════════════════════════════════════^7")
+    print("^2Usage: /home <skinname> | /homeoff | /homelist^7")
 end, false)
 
--- ============================================================================
--- HOME SKIN MENU (Native UI)
--- /homemenu to open, Arrow keys to navigate, Enter to select, Backspace to close
--- ============================================================================
-
--- ============================================================================
--- SKIN MENU — Premium UI + 3D Preview
--- F12 or /homemenu to toggle
--- ============================================================================
-
-local menuOpen = false
-local menuTab = 1
-local menuIndex = 1
-local menuItems = {}
-local menuTabs = { "POOLCUE", "BOTTLE" }
-local menuInputCD = 0
-local menuAnim = 0.0
-local menuNotify = nil
-local menuNotifyEnd = 0
-local menuNotifyCol = nil
-
--- 3D Preview
-local previewObj = nil
-local previewModel = nil
-local previewRot = 0.0
-local previewTargetRot = 0.0
-
-local function C(r, g, b, a) return { r = r, g = g, b = b, a = a or 255 } end
-local function Ca(c, a) return C(c.r, c.g, c.b, math.floor((c.a or 255) * a)) end
-local function lerp(a, b, t) return a + (b - a) * math.min(math.max(t, 0), 1) end
-
--- Layout
-local PANEL_W = 0.23
-local PANEL_X = 0.855
-local PREVIEW_X = 0.62
-local PREVIEW_W = 0.22
-local TOP_Y = 0.06
-local ITEM_H = 0.038
-local MAX_SHOW = 8
-
-local T = {
-    panel     = C(12, 12, 20, 240),
-    panel2    = C(16, 16, 26, 230),
-    head_l    = C(0, 160, 255),
-    head_r    = C(0, 220, 180),
-    accent    = C(0, 200, 255),
-    accent2   = C(0, 255, 200),
-    tab_bg    = C(20, 20, 32, 240),
-    tab_on    = C(0, 150, 220, 255),
-    tab_off   = C(35, 35, 50, 220),
-    item_a    = C(20, 20, 32, 200),
-    item_b    = C(25, 25, 38, 200),
-    sel       = C(0, 120, 220, 255),
-    sel_glow  = C(0, 160, 255, 40),
-    active    = C(0, 180, 100, 240),
-    active_s  = C(0, 210, 130, 255),
-    white     = C(240, 242, 248),
-    dim       = C(120, 125, 145),
-    dim2      = C(80, 85, 100),
-    cyan      = C(0, 220, 255),
-    green     = C(80, 240, 140),
-    red       = C(255, 80, 80),
-    blue      = C(80, 170, 255),
-    orange    = C(255, 180, 60),
-    footer    = C(8, 8, 16, 240),
-    shadow    = C(0, 0, 0, 120),
-    preview   = C(14, 14, 22, 220),
-    prev_border = C(0, 180, 255, 80),
-}
-
-local function dR(x, y, w, h, c)
-    DrawRect(x, y, w, h, c.r, c.g, c.b, c.a or 255)
-end
-
-local function dT(text, x, y, scale, c, font, align)
-    SetTextFont(font or 4)
-    SetTextScale(scale, scale)
-    SetTextColour(c.r, c.g, c.b, c.a or 255)
-    if align == 'r' then
-        SetTextJustification(2)
-        SetTextWrap(0.0, x)
-    elseif align == 'c' then
-        SetTextJustification(0)
-        SetTextWrap(0.0, 1.0)
-    else
-        SetTextJustification(1)
-    end
-    SetTextDropShadow(2, 0, 0, 0, 220)
-    SetTextEntry("STRING")
-    AddTextComponentString(text)
-    DrawText((align == 'r') and 0.0 or x, y)
-end
-
-local function dLine(x, y, w, c)
-    dR(x, y, w, 0.0018, c)
-end
-
-local function buildMenuItems()
-    menuItems = {}
-    local wType = menuTabs[menuTab]
-    for id, s in pairs(SKINS) do
-        if s.weapon == wType then
-            menuItems[#menuItems+1] = { id = id, skin = s }
-        end
-    end
-    table.sort(menuItems, function(a, b) return a.id < b.id end)
-    if menuIndex > #menuItems then menuIndex = #menuItems end
-    if menuIndex < 1 then menuIndex = 1 end
-end
-
--- ── 3D Preview ──
-local function destroyPreview()
-    if previewObj and DoesEntityExist(previewObj) then
-        SetEntityAsMissionEntity(previewObj, true, true)
-        DeleteEntity(previewObj)
-    end
-    previewObj = nil
-    previewModel = nil
-end
-
-local function updatePreview(modelName)
-    if not modelName then destroyPreview() return end
-    if previewModel == modelName and previewObj and DoesEntityExist(previewObj) then return end
-    destroyPreview()
-
-    local h = GetHashKey(modelName)
-    if not IsModelValid(h) then h = GetHashKey(string.upper(modelName)) end
-    if not IsModelValid(h) then return end
-
-    RequestModel(h)
-    local deadline = GetGameTimer() + 2000
-    while not HasModelLoaded(h) and GetGameTimer() < deadline do Wait(0) end
-    if not HasModelLoaded(h) then return end
-
-    local ped = PlayerPedId()
-    local fwd = GetEntityForwardVector(ped)
-    local pos = GetEntityCoords(ped)
-    local spawnPos = pos + fwd * 1.6 + vector3(0, 0, 0.3)
-
-    local obj = CreateObject(h, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false)
-    if not DoesEntityExist(obj) then return end
-
-    SetEntityCompletelyDisableCollision(obj, false, false)
-    FreezeEntityPosition(obj, true)
-    SetEntityAlpha(obj, 0, false)
-    SetModelAsNoLongerNeeded(h)
-
-    previewObj = obj
-    previewModel = modelName
-    previewRot = 0.0
-end
-
-local function tickPreview()
-    if not previewObj or not DoesEntityExist(previewObj) then return end
-
-    local ped = PlayerPedId()
-    local fwd = GetEntityForwardVector(ped)
-    local pos = GetEntityCoords(ped)
-    local spawnPos = pos + fwd * 1.8 + vector3(0, 0, 0.5)
-
-    SetEntityCoords(previewObj, spawnPos.x, spawnPos.y, spawnPos.z, false, false, false, false)
-
-    previewRot = previewRot + 1.2
-    if previewRot >= 360.0 then previewRot = previewRot - 360.0 end
-    SetEntityRotation(previewObj, 0.0, 0.0, previewRot, 2, true)
-
-    local curAlpha = GetEntityAlpha(previewObj)
-    if curAlpha < 220 then
-        SetEntityAlpha(previewObj, math.min(curAlpha + 15, 220), false)
-    end
-
-    SetEntityDrawOutline(previewObj, true)
-    SetEntityDrawOutlineColor(0, 180, 255, 60)
-end
-
--- ── Skin apply/remove (connected to HOME system) ──
-local function applyMenuSkin(id)
-    local sk = SKINS[id]
-    if not sk then return end
-    local wType = sk.weapon or "POOLCUE"
-    activeSkins[wType] = id
-    saveKVP(wType, id)
-    SetResourceKvp('aqua_bypass_skin', id)
-    local ped = PlayerPedId()
-    local w = GetSelectedPedWeapon(ped)
-    if getWeaponType(w) == wType then
-        destroyProp()
-        createProp(ped, sk.model, wType)
-        local wEnt = GetCurrentPedWeaponEntityIndex(ped)
-        if wEnt ~= 0 and DoesEntityExist(wEnt) then
-            SetEntityVisible(wEnt, false, false)
-        end
-    end
-    startLoop()
-    startDmg()
-    menuNotify = "Equipped  " .. sk.name
-    menuNotifyCol = T.green
-    menuNotifyEnd = GetGameTimer() + 2000
-end
-
-local function removeMenuSkin(wType)
-    activeSkins[wType] = nil
-    saveKVP(wType, '')
-    destroyProp()
-    menuNotify = "Removed  " .. wType .. " skin"
-    menuNotifyCol = T.red
-    menuNotifyEnd = GetGameTimer() + 2000
-end
-
--- ── Open / Close ──
-local function openMenu()
-    menuOpen = true
-    menuTab = 1
-    menuIndex = 1
-    menuAnim = 0.0
-    buildMenuItems()
-    PlaySoundFrontend(-1, "SELECT", "HUD_FREEMODE_SOUNDSET", true)
-end
-
-local function closeMenu()
-    menuOpen = false
-    destroyPreview()
-    PlaySoundFrontend(-1, "BACK", "HUD_FREEMODE_SOUNDSET", true)
-end
-
--- ── Input ──
-local function menuInput()
-    local now = GetGameTimer()
-    if now < menuInputCD then return end
-
-    if IsControlJustPressed(0, 172) then
-        menuIndex = menuIndex - 1
-        if menuIndex < 1 then menuIndex = #menuItems end
-        menuInputCD = now + 140
-        PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FREEMODE_SOUNDSET", true)
-    elseif IsControlJustPressed(0, 173) then
-        menuIndex = menuIndex + 1
-        if menuIndex > #menuItems then menuIndex = 1 end
-        menuInputCD = now + 140
-        PlaySoundFrontend(-1, "NAV_UP_DOWN", "HUD_FREEMODE_SOUNDSET", true)
-    elseif IsControlJustPressed(0, 174) then
-        menuTab = menuTab - 1
-        if menuTab < 1 then menuTab = #menuTabs end
-        menuIndex = 1
-        buildMenuItems()
-        menuInputCD = now + 160
-        PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FREEMODE_SOUNDSET", true)
-    elseif IsControlJustPressed(0, 175) then
-        menuTab = menuTab + 1
-        if menuTab > #menuTabs then menuTab = 1 end
-        menuIndex = 1
-        buildMenuItems()
-        menuInputCD = now + 160
-        PlaySoundFrontend(-1, "NAV_LEFT_RIGHT", "HUD_FREEMODE_SOUNDSET", true)
-    elseif IsControlJustPressed(0, 191) then
-        if menuItems[menuIndex] then
-            local item = menuItems[menuIndex]
-            local wType = menuTabs[menuTab]
-            if activeSkins[wType] == item.id then
-                removeMenuSkin(wType)
-            else
-                applyMenuSkin(item.id)
-            end
-            buildMenuItems()
-            PlaySoundFrontend(-1, "SELECT", "HUD_FREEMODE_SOUNDSET", true)
-        end
-        menuInputCD = now + 250
-    elseif IsControlJustPressed(0, 194) or IsControlJustPressed(0, 202) then
-        closeMenu()
-        menuInputCD = now + 300
-    end
-end
-
--- ── Draw ──
-local function drawMenu()
-    menuAnim = lerp(menuAnim, 1.0, 0.10)
-    local a = menuAnim
-    local slideX = (1.0 - a) * 0.04
-    local px = PANEL_X + slideX
-    local y = TOP_Y
-
-    -- ═══ PANEL SHADOW ═══
-    dR(px + 0.004, y + 0.24, PANEL_W + 0.008, 0.50, Ca(T.shadow, a))
-
-    -- ═══ HEADER ═══
-    local headH = 0.055
-    dR(px, y + headH / 2, PANEL_W, headH, Ca(C(8, 8, 18, 250), a))
-    -- gradient accent top edge
-    dR(px, y + 0.001, PANEL_W, 0.003, Ca(T.accent, a))
-    -- title
-    dT("AQUA", px - 0.002, y + 0.010, 0.55, Ca(T.head_l, a), 1, 'c')
-    -- subtitle
-    dT("WEAPON  SKINS", px, y + 0.035, 0.22, Ca(T.dim, a), 4, 'c')
-    y = y + headH
-
-    -- thin divider
-    dLine(px, y, PANEL_W, Ca(T.accent, a * 0.5))
-
-    -- ═══ TAB BAR ═══
-    local tabH = 0.034
-    y = y + 0.002
-    dR(px, y + tabH / 2, PANEL_W, tabH, Ca(T.tab_bg, a))
-
-    local tabW = (PANEL_W - 0.012) / #menuTabs
-    local tabStartX = px - PANEL_W / 2 + 0.006
-    for i, name in ipairs(menuTabs) do
-        local tx = tabStartX + tabW * (i - 0.5)
-        local isSel = (i == menuTab)
-        local hasActive = activeSkins[name] ~= nil
-
-        if isSel then
-            dR(tx, y + tabH / 2, tabW - 0.003, tabH - 0.008, Ca(T.tab_on, a))
-            dR(tx, y + tabH - 0.003, tabW * 0.6, 0.003, Ca(T.accent, a))
-        else
-            dR(tx, y + tabH / 2, tabW - 0.003, tabH - 0.008, Ca(T.tab_off, a))
-        end
-
-        local label = name
-        if hasActive then label = label .. "  ~g~*" end
-        local tc = isSel and T.white or T.dim
-        dT(label, tx, y + 0.007, 0.26, Ca(tc, a), 4, 'c')
-    end
-    y = y + tabH + 0.004
-    dLine(px, y, PANEL_W, Ca(T.dim2, a * 0.4))
-    y = y + 0.004
-
-    -- ═══ SKIN LIST ═══
-    local showCount = math.min(#menuItems, MAX_SHOW)
-    if showCount < 1 then showCount = 1 end
-    local listH = showCount * ITEM_H + 0.008
-    dR(px, y + listH / 2, PANEL_W, listH, Ca(T.panel, a))
-
-    local iy = y + 0.004
-
-    if #menuItems == 0 then
-        dT("~c~No skins in this category", px, iy + 0.008, 0.26, Ca(T.dim, a), 4, 'c')
-    else
-        local scrollOff = 0
-        if #menuItems > MAX_SHOW then
-            scrollOff = math.max(0, math.min(menuIndex - math.floor(MAX_SHOW / 2), #menuItems - MAX_SHOW))
-        end
-
-        if scrollOff > 0 then
-            dT("~b~^", px, iy - 0.003, 0.20, Ca(T.cyan, a), 4, 'c')
-        end
-
-        for idx = scrollOff + 1, math.min(scrollOff + MAX_SHOW, #menuItems) do
-            local item = menuItems[idx]
-            local wType = menuTabs[menuTab]
-            local isActive = (activeSkins[wType] == item.id)
-            local isSel = (idx == menuIndex)
-            local cy = iy + ITEM_H / 2
-
-            -- row bg
-            local bgc
-            if isSel and isActive then bgc = T.active_s
-            elseif isSel then bgc = T.sel
-            elseif isActive then bgc = T.active
-            elseif (idx % 2 == 0) then bgc = T.item_b
-            else bgc = T.item_a end
-            dR(px, cy, PANEL_W - 0.010, ITEM_H - 0.003, Ca(bgc, a))
-
-            -- selection glow
-            if isSel then
-                dR(px, cy, PANEL_W - 0.008, ITEM_H + 0.002, Ca(T.sel_glow, a))
-                dR(px - PANEL_W / 2 + 0.008, cy, 0.004, ITEM_H - 0.010, Ca(T.accent, a))
-            end
-
-            -- number
-            local numX = px - PANEL_W / 2 + 0.015
-            local numCol = isSel and T.cyan or T.dim2
-            dT(tostring(idx), numX, iy + 0.008, 0.22, Ca(numCol, a), 4)
-
-            -- skin name
-            local nameX = px - PANEL_W / 2 + 0.032
-            local nameCol = (isSel or isActive) and T.white or T.dim
-            dT(item.skin.name, nameX, iy + 0.006, 0.27, Ca(nameCol, a), 4)
-
-            -- badges
-            local bx = px + PANEL_W / 2 - 0.014
-            if isActive then
-                dR(bx + 0.002, cy, 0.024, 0.018, Ca(C(0, 160, 80, 180), a))
-                dT("ON", bx + 0.002, iy + 0.007, 0.20, Ca(T.white, a), 4, 'c')
-                bx = bx - 0.028
-            end
-            if item.skin.kill then
-                dR(bx + 0.001, cy, 0.014, 0.014, Ca(C(180, 40, 40, 160), a))
-                dT("K", bx + 0.001, iy + 0.009, 0.18, Ca(T.red, a), 4, 'c')
-                bx = bx - 0.018
-            end
-            if item.skin.ptfx then
-                dR(bx + 0.001, cy, 0.014, 0.014, Ca(C(30, 100, 200, 160), a))
-                dT("F", bx + 0.001, iy + 0.009, 0.18, Ca(T.blue, a), 4, 'c')
-            end
-
-            iy = iy + ITEM_H
-        end
-
-        if scrollOff + MAX_SHOW < #menuItems then
-            dT("~b~v", px, iy + 0.001, 0.20, Ca(T.cyan, a), 4, 'c')
-        end
-    end
-
-    y = y + listH
-
-    -- ═══ INFO PANEL ═══
-    if menuItems[menuIndex] then
-        local sk = menuItems[menuIndex].skin
-        local infoH = 0.072
-        y = y + 0.003
-        dR(px, y + infoH / 2, PANEL_W, infoH, Ca(T.panel2, a))
-        dLine(px, y + 0.002, PANEL_W - 0.016, Ca(T.accent, a * 0.3))
-
-        local lx = px - PANEL_W / 2 + 0.012
-
-        dT("~b~" .. sk.name, lx, y + 0.008, 0.28, Ca(T.white, a), 4)
-        dT("Model  ~b~" .. sk.model, lx, y + 0.028, 0.20, Ca(T.dim, a), 4)
-
-        local tags = {}
-        if sk.ptfx then tags[#tags+1] = "~b~Hand FX" end
-        if sk.kill then tags[#tags+1] = "~r~Kill FX" end
-        if #tags == 0 then tags[#tags+1] = "~w~Standard" end
-        dT(table.concat(tags, "  ~s~|  "), lx, y + 0.046, 0.20, Ca(T.dim, a), 4)
-
-        local wType = menuTabs[menuTab]
-        if activeSkins[wType] == menuItems[menuIndex].id then
-            dT("~g~EQUIPPED", px + PANEL_W / 2 - 0.014, y + 0.008, 0.24, Ca(T.green, a), 4, 'r')
-        end
-
-        y = y + infoH
-    end
-
-    -- ═══ SCROLL BAR ═══
-    if #menuItems > MAX_SHOW then
-        local sbX = px + PANEL_W / 2 - 0.003
-        local sbTop = TOP_Y + 0.055 + 0.034 + 0.008
-        local sbH = MAX_SHOW * ITEM_H
-        dR(sbX, sbTop + sbH / 2, 0.003, sbH, Ca(C(30, 30, 45, 150), a))
-        local thumbH = sbH * (MAX_SHOW / #menuItems)
-        local thumbOff = sbH * ((menuIndex - 1) / #menuItems)
-        dR(sbX, sbTop + thumbOff + thumbH / 2, 0.003, thumbH, Ca(T.accent, a * 0.8))
-    end
-
-    -- ═══ COUNTER ═══
-    if #menuItems > 0 then
-        y = y + 0.003
-        dR(px, y + 0.010, PANEL_W, 0.020, Ca(C(10, 10, 18, 220), a))
-        dT(menuIndex .. " / " .. #menuItems, px, y + 0.002, 0.20, Ca(T.dim, a), 4, 'c')
-        y = y + 0.020
-    end
-
-    -- ═══ FOOTER ═══
-    y = y + 0.003
-    local footH = 0.032
-    dR(px, y + footH / 2, PANEL_W, footH, Ca(T.footer, a))
-    dLine(px, y + 0.001, PANEL_W, Ca(T.dim2, a * 0.3))
-    dT("~b~< > ~s~Tab    ~b~Enter ~s~Select    ~b~Esc ~s~Close", px, y + 0.008, 0.19, Ca(T.dim, a), 4, 'c')
-
-    -- ═══ PREVIEW PANEL LABEL ═══
-    if menuItems[menuIndex] then
-        local pvX = PREVIEW_X - slideX * 0.5
-        local pvY = TOP_Y
-        dR(pvX, pvY + 0.018, PREVIEW_W, 0.035, Ca(C(8, 8, 18, 200), a))
-        dR(pvX, pvY + 0.001, PREVIEW_W, 0.003, Ca(T.accent, a * 0.6))
-        dT("3D  PREVIEW", pvX, pvY + 0.005, 0.26, Ca(T.cyan, a), 4, 'c')
-
-        -- preview frame border
-        local frameH = 0.28
-        local frameY = pvY + 0.035 + frameH / 2 + 0.004
-        dR(pvX, frameY, PREVIEW_W + 0.004, frameH + 0.004, Ca(T.prev_border, a))
-        dR(pvX, frameY, PREVIEW_W, frameH, Ca(T.preview, a))
-
-        -- corner accents
-        local cl = pvX - PREVIEW_W / 2
-        local cr = pvX + PREVIEW_W / 2
-        local ct = frameY - frameH / 2
-        local cb = frameY + frameH / 2
-        dR(cl + 0.008, ct, 0.016, 0.002, Ca(T.accent, a))
-        dR(cl, ct + 0.010, 0.002, 0.020, Ca(T.accent, a))
-        dR(cr - 0.008, ct, 0.016, 0.002, Ca(T.accent, a))
-        dR(cr, ct + 0.010, 0.002, 0.020, Ca(T.accent, a))
-        dR(cl + 0.008, cb, 0.016, 0.002, Ca(T.accent, a))
-        dR(cl, cb - 0.010, 0.002, 0.020, Ca(T.accent, a))
-        dR(cr - 0.008, cb, 0.016, 0.002, Ca(T.accent, a))
-        dR(cr, cb - 0.010, 0.002, 0.020, Ca(T.accent, a))
-
-        -- model name in preview
-        dT("~b~" .. menuItems[menuIndex].skin.model, pvX, frameY + frameH / 2 - 0.022, 0.22, Ca(T.dim, a), 4, 'c')
-    end
-
-    -- ═══ NOTIFICATION ═══
-    if menuNotify and GetGameTimer() < menuNotifyEnd then
-        local elapsed = GetGameTimer() - (menuNotifyEnd - 2000)
-        local na = 1.0
-        if elapsed > 1500 then na = 1.0 - (elapsed - 1500) / 500 end
-        local nc = menuNotifyCol or T.green
-        local ny = TOP_Y - 0.035
-
-        dR(px, ny, PANEL_W + 0.02, 0.028, Ca(C(nc.r, nc.g, nc.b, 200), na))
-        dT(menuNotify, px, ny - 0.009, 0.27, Ca(T.white, na), 4, 'c')
-    elseif menuNotify and GetGameTimer() >= menuNotifyEnd then
-        menuNotify = nil
-    end
-end
-
--- ── Main Thread ──
-CreateThread(function()
-    while true do
-        if menuOpen then
-            menuInput()
-            drawMenu()
-
-            -- Update 3D preview
-            if menuItems[menuIndex] then
-                updatePreview(menuItems[menuIndex].skin.model)
-            else
-                destroyPreview()
-            end
-            tickPreview()
-
-            -- Disable controls while menu open
-            DisableControlAction(0, 1, true)
-            DisableControlAction(0, 2, true)
-            DisableControlAction(0, 24, true)
-            DisableControlAction(0, 25, true)
-            DisableControlAction(0, 37, true)
-            DisableControlAction(0, 44, true)
-            DisableControlAction(0, 140, true)
-            DisableControlAction(0, 141, true)
-            DisableControlAction(0, 142, true)
-            DisableControlAction(0, 18, true)
-            DisableControlAction(0, 69, true)
-            DisableControlAction(0, 92, true)
-            Wait(0)
-        else
-            Wait(200)
-        end
-    end
-end)
-
-RegisterCommand('homemenu', function()
-    if menuOpen then closeMenu() else openMenu() end
-end, false)
-
-RegisterKeyMapping('homemenu', 'Skin Menu', 'keyboard', 'F12')
+print("^2[1nfx_weaponskin] Loaded — /home <skin> | /homelist | /homeoff^7")
