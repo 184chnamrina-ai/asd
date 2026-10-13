@@ -211,23 +211,39 @@ end
 
 local function StopHandFx() handFxLoopActive = false end
 
+-- ค้นหา FX list: ลอง weaponType ก่อน ถ้าไม่มีก็ fallback ไป entry อื่น
+local function FindFxList(effectBlock, weaponType)
+    if not effectBlock then return nil end
+    local fxList = effectBlock[weaponType]
+    if fxList and #fxList > 0 then return fxList end
+    for _, list in pairs(effectBlock) do
+        if type(list) == 'table' and #list > 0 then return list end
+    end
+    return nil
+end
+
+-- ค้นหา FX จาก Kill หรือ Hit — fallback ข้าม category
+local function FindAnyFx(effects, weaponType)
+    if not effects then return nil, nil end
+    local fxList = nil
+    local screen = nil
+    if effects.Kill then
+        fxList = FindFxList(effects.Kill.Effect, weaponType)
+        screen = effects.Kill.Screen
+    end
+    if not fxList and effects.Hit then
+        fxList = FindFxList(effects.Hit.Effect, weaponType)
+        screen = screen or effects.Hit.Screen
+    end
+    return fxList, screen
+end
+
 local function StartHandFx(skinName, weaponType)
     StopHandFx()
     local effects = GetEffects(skinName)
     if not effects then return end
 
-    local holdFx = effects.Hold
-    if not holdFx or not holdFx.Effect then return end
-
-    local fxList = holdFx.Effect[weaponType]
-    if not fxList or #fxList == 0 then
-        for _, list in pairs(holdFx.Effect) do
-            if type(list) == 'table' and #list > 0 then
-                fxList = list
-                break
-            end
-        end
-    end
+    local fxList = FindAnyFx(effects, weaponType)
     if not fxList or #fxList == 0 then return end
 
     handFxLoopActive = true
@@ -241,7 +257,7 @@ local function StartHandFx(skinName, weaponType)
                     local dict = fx.particleDictionary
                     local eff = fx.particleName
                     local bone = fx.bone or 57005
-                    local scale = fx.scale or 1.0
+                    local scale = (fx.scale or 1.0) * 0.5
                     local off = fx.offset or {}
                     local rot = fx.rot or {}
                     if dict and eff and EnsurePtfx(dict) then
@@ -261,62 +277,98 @@ local function StartHandFx(skinName, weaponType)
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- KILL / HIT EFFECTS
+-- KILL / HIT EFFECTS — ใช้ได้ทุกไม้ fallback Kill↔Hit
 -- ═══════════════════════════════════════════════════════════════════════════════
+local function PlayScreenEffect(screen)
+    if not screen then return end
+    if screen.image and screen.image ~= '' then
+        SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = screen.image, time = screen.duration or 3000 })
+    end
+    if screen.sound and screen.sound ~= '' then
+        SendNUIMessage({ action = 'PLAY_SOUND', sound = screen.sound, volume = screen.volume or 0.3 })
+    end
+end
+
+local function PlayPtfxAtTarget(fxList, targetPos)
+    if not fxList then return end
+    for _, ptfx in ipairs(fxList) do
+        local dict = ptfx.particleDictionary
+        local eff = ptfx.particleName
+        local scale = ptfx.scale or 1.0
+        local off = ptfx.offset or {}
+        if dict and eff and EnsurePtfx(dict) then
+            UseParticleFxAsset(dict)
+            StartParticleFxNonLoopedAtCoord(
+                eff,
+                targetPos.x + (off.x or 0), targetPos.y + (off.y or 0), targetPos.z + (off.z or 0),
+                0.0, 0.0, 0.0, scale, false, false, false
+            )
+        end
+    end
+end
+
+local function GetTargetPos(victimPed)
+    local pos = GetEntityCoords(victimPed)
+    local headBone = GetPedBoneIndex(victimPed, 31086)
+    local targetPos = pos + vector3(0.0, 0.0, 1.0)
+    if headBone ~= -1 then
+        local bPos = GetWorldPositionOfEntityBone(victimPed, headBone)
+        if bPos and #(bPos - pos) < 3.0 and bPos.z > 0.0 then targetPos = bPos end
+    end
+    return targetPos
+end
+
+local lastHitTime = 0
+
 local function PlayKillEffect(victimPed, skinName, weaponType)
     local now = GetGameTimer()
     if now - lastEffectTime < 2000 then return end
     lastEffectTime = now
 
     local effects = GetEffects(skinName)
-    if not effects or not effects.Kill then return end
+    if not effects then return end
 
-    local killFx = effects.Kill
-    if killFx.Effect then
-        local fxList = killFx.Effect[weaponType]
-        if not fxList then
-            for _, list in pairs(killFx.Effect) do
-                if type(list) == 'table' and #list > 0 then fxList = list break end
-            end
-        end
-        if fxList then
-            local pos = GetEntityCoords(victimPed)
-            local headBone = GetPedBoneIndex(victimPed, 31086)
-            local targetPos = pos + vector3(0.0, 0.0, 1.0)
-            if headBone ~= -1 then
-                local bPos = GetWorldPositionOfEntityBone(victimPed, headBone)
-                if bPos and #(bPos - pos) < 3.0 and bPos.z > 0.0 then targetPos = bPos end
-            end
-            for _, ptfx in ipairs(fxList) do
-                local dict = ptfx.particleDictionary
-                local eff = ptfx.particleName
-                local scale = ptfx.scale or 1.0
-                local off = ptfx.offset or {}
-                if dict and eff and EnsurePtfx(dict) then
-                    UseParticleFxAsset(dict)
-                    StartParticleFxNonLoopedAtCoord(
-                        eff,
-                        targetPos.x + (off.x or 0), targetPos.y + (off.y or 0), targetPos.z + (off.z or 0),
-                        0.0, 0.0, 0.0, scale, false, false, false
-                    )
-                end
-            end
-        end
+    -- ลอง Kill ก่อน fallback Hit
+    local fxList, screen = nil, nil
+    if effects.Kill and effects.Kill.Effect then
+        fxList = FindFxList(effects.Kill.Effect, weaponType)
+        screen = effects.Kill.Screen
+    end
+    if not fxList and effects.Hit and effects.Hit.Effect then
+        fxList = FindFxList(effects.Hit.Effect, weaponType)
+        screen = screen or (effects.Hit and effects.Hit.Screen)
     end
 
-    if killFx.Screen then
-        local scr = killFx.Screen
-        if scr.image and scr.image ~= '' then
-            SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = scr.image, time = scr.duration or 3000 })
-        end
-        if scr.sound and scr.sound ~= '' then
-            SendNUIMessage({ action = 'PLAY_SOUND', sound = scr.sound, volume = scr.volume or 0.3 })
-        end
+    if fxList then
+        PlayPtfxAtTarget(fxList, GetTargetPos(victimPed))
+    end
+    PlayScreenEffect(screen)
+end
+
+local function PlayHitEffect(victimPed, skinName, weaponType)
+    local now = GetGameTimer()
+    if now - lastHitTime < 1000 then return end
+    lastHitTime = now
+
+    local effects = GetEffects(skinName)
+    if not effects then return end
+
+    -- ลอง Hit ก่อน fallback Kill
+    local fxList = nil
+    if effects.Hit and effects.Hit.Effect then
+        fxList = FindFxList(effects.Hit.Effect, weaponType)
+    end
+    if not fxList and effects.Kill and effects.Kill.Effect then
+        fxList = FindFxList(effects.Kill.Effect, weaponType)
+    end
+
+    if fxList then
+        PlayPtfxAtTarget(fxList, GetTargetPos(victimPed))
     end
 end
 
 -- ═══════════════════════════════════════════════════════════════════════════════
--- DAMAGE HANDLER
+-- DAMAGE HANDLER — ทั้ง Kill + Hit
 -- ═══════════════════════════════════════════════════════════════════════════════
 local function RegisterDamageHandler()
     if damageRegistered then return end
@@ -329,9 +381,11 @@ local function RegisterDamageHandler()
         local isDead = eventData[4]
         local ped = PlayerPedId()
         if attacker ~= ped or victim == ped then return end
+        local wType = GetWeaponType(GetSelectedPedWeapon(ped))
         if isDead == 1 or IsEntityDead(victim) or IsPedDeadOrDying(victim, true) then
-            local wType = GetWeaponType(GetSelectedPedWeapon(ped))
             PlayKillEffect(victim, selectedSkin, wType)
+        else
+            PlayHitEffect(victim, selectedSkin, wType)
         end
     end)
 end
