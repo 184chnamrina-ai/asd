@@ -83,6 +83,43 @@ local function GetWeaponCategory(weaponHash)
         cat = hashToCategory[weaponHash + 0x100000000]
         if cat then return cat end
     end
+
+    if Config and Config.Weapons then
+        for weaponName, weaponData in pairs(Config.Weapons) do
+            if GetHashKey(weaponName) == weaponHash then
+                return weaponData.category
+            end
+        end
+    end
+
+    for _, testName in ipairs({
+        'WEAPON_POOLCUE','WEAPON_POOLCUE_S','WEAPON_POOLCUE_TIER','WEAPON_POOLCUE_FREE','WEAPON_POOLCUE_NEWBIE',
+    }) do
+        if weaponHash == GetHashKey(testName) then return 'POOLCUE' end
+    end
+
+    local patterns = {
+        { pat = "POOLCUE", cat = "POOLCUE" },
+        { pat = "BOTTLE",  cat = "BOTTLE" },
+        { pat = "KNIFE",   cat = "KNIFE" },
+        { pat = "KNUCKLE", cat = "KNUCKLE" },
+        { pat = "MACHETE", cat = "MACHETE" },
+        { pat = "STUNGUN", cat = "TAZER" },
+        { pat = "REVOLVER", cat = "TAZER" },
+        { pat = "DAGGER",  cat = "KNIFE" },
+    }
+    for i = 0, 10 do
+        for _, p in ipairs(patterns) do
+            for _, suffix in ipairs({'', '_'..i, tostring(i), '_LV'..i, '_TIER'..i, '_S', '_FREE', '_NEWBIE', '_BATTLE', '_WAR', '14DAY'}) do
+                local testName = 'WEAPON_' .. p.pat .. suffix
+                if GetHashKey(testName) == weaponHash then
+                    hashToCategory[weaponHash] = p.cat
+                    return p.cat
+                end
+            end
+        end
+    end
+
     return nil
 end
 
@@ -161,7 +198,7 @@ local function FindSkinForWeapon(skinLabel, weaponHash)
         end
     end
 
-    return entries[1]
+    return nil
 end
 
 local function FindSkinByItemName(itemName)
@@ -215,12 +252,6 @@ local function AttachPropSkin(ped, modelName, pos, rot)
     return true
 end
 
-local function TryGiveComponent(ped, weaponHash, compHash)
-    GiveWeaponComponentToPed(ped, weaponHash, compHash)
-    if origHasPedGot(ped, weaponHash, compHash) then return true end
-    return false
-end
-
 local function ApplySkin(ped, weaponHash, entry)
     if not entry then return end
     skinAppliedAsComponent = false
@@ -232,41 +263,35 @@ local function ApplySkin(ped, weaponHash, entry)
 
     if entry.component then
         local compHash = GetHashKey(entry.component)
+        local allHashes = { compHash }
+        if entry.item then allHashes[#allHashes+1] = GetHashKey(entry.item) end
+        if entry.upgrade and entry.upgrade ~= '' then allHashes[#allHashes+1] = GetHashKey(entry.upgrade) end
 
-        if TryGiveComponent(ped, weaponHash, compHash) then
-            skinAppliedAsComponent = true
-            return
-        end
-
+        local allWeaponHashes = { weaponHash }
         local myCat = GetWeaponCategory(weaponHash)
         if myCat and CATEGORY_MAP[myCat] then
             for _, wpInfo in ipairs(CATEGORY_MAP[myCat]) do
                 if wpInfo.weaponHash ~= weaponHash then
-                    if TryGiveComponent(ped, wpInfo.weaponHash, compHash) then
-                        skinAppliedAsComponent = true
-                        return
-                    end
+                    allWeaponHashes[#allWeaponHashes+1] = wpInfo.weaponHash
                 end
             end
         end
 
-        if entry.item then
-            local itemHash = GetHashKey(entry.item)
-            if TryGiveComponent(ped, weaponHash, itemHash) then
+        for _, wh in ipairs(allWeaponHashes) do
+            for _, ch in ipairs(allHashes) do
+                GiveWeaponComponentToPed(ped, wh, ch)
+            end
+        end
+
+        for _, ch in ipairs(allHashes) do
+            if origHasPedGot(ped, weaponHash, ch) then
                 skinAppliedAsComponent = true
+                print(("^2[SKIN] Component applied OK: hash %d on weapon %d^7"):format(ch, weaponHash))
                 return
             end
         end
 
-        if entry.upgrade and entry.upgrade ~= '' then
-            local upHash = GetHashKey(entry.upgrade)
-            if TryGiveComponent(ped, weaponHash, upHash) then
-                skinAppliedAsComponent = true
-                return
-            end
-        end
-
-        GiveWeaponComponentToPed(ped, weaponHash, compHash)
+        print(("^1[SKIN] Component failed on weapon hash %d, trying all...^7"):format(weaponHash))
         skinAppliedAsComponent = true
     end
 end
@@ -577,6 +602,15 @@ RegisterCommand('home', function(_, args)
 
     if curWp == 0 or curWp == GetHashKey('WEAPON_UNARMED') then
         SendMsg("^1[ERROR]^0 Hold a weapon first!")
+        return
+    end
+
+    local wpCat = GetWeaponCategory(curWp)
+    print(("^3[SKIN DEBUG] Weapon hash: %s (%d) | Category: %s^7"):format(
+        tostring(curWp), curWp, tostring(wpCat or "UNKNOWN")))
+
+    if not wpCat then
+        SendMsg(("^1[ERROR]^0 Unknown weapon (hash: %d). Cannot apply skin."):format(curWp))
         return
     end
 
