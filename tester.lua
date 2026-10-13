@@ -186,36 +186,66 @@ local function CleanupProp()
     propObject = nil
 end
 
+local skinAppliedAsComponent = false
+
+local function AttachPropSkin(ped, modelName, pos, rot)
+    CleanupProp()
+    local modelHash = GetHashKey(modelName)
+    RequestModel(modelHash)
+    local t = GetGameTimer() + 3000
+    while not HasModelLoaded(modelHash) and GetGameTimer() < t do Wait(10) end
+    if not HasModelLoaded(modelHash) then return false end
+
+    local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
+    if wpEntity and wpEntity ~= 0 and DoesEntityExist(wpEntity) then
+        SetEntityVisible(wpEntity, false, false)
+        SetEntityAlpha(wpEntity, 0, false)
+    end
+
+    local obj = CreateObject(modelHash, 0.0, 0.0, 0.0, false, false, false)
+    if obj and obj ~= 0 then
+        local p = pos or vector3(0.0, 0.0, 0.0)
+        local r = rot or vector3(0.0, 0.0, 0.0)
+        AttachEntityToEntity(obj, ped, GetPedBoneIndex(ped, 28422),
+            p.x, p.y, p.z, r.x, r.y, r.z,
+            true, true, false, true, 1, true)
+        propObject = obj
+    end
+    SetModelAsNoLongerNeeded(modelHash)
+    return true
+end
+
 local function ApplySkin(ped, weaponHash, entry)
     if not entry then return end
+    skinAppliedAsComponent = false
 
     if entry.model and entry.model ~= '' then
-        CleanupProp()
-        local modelHash = GetHashKey(entry.model)
-        RequestModel(modelHash)
-        local t = GetGameTimer() + 3000
-        while not HasModelLoaded(modelHash) and GetGameTimer() < t do Wait(10) end
-        if HasModelLoaded(modelHash) then
-            local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
-            if wpEntity and wpEntity ~= 0 and DoesEntityExist(wpEntity) then
-                SetEntityVisible(wpEntity, false, false)
-                SetEntityAlpha(wpEntity, 0, false)
-            end
-            local obj = CreateObject(modelHash, 0.0, 0.0, 0.0, false, false, false)
-            if obj and obj ~= 0 then
-                local pos = entry.pos or vector3(0.0, 0.0, 0.0)
-                local rot = entry.rot or vector3(0.0, 0.0, 0.0)
-                AttachEntityToEntity(obj, ped, GetPedBoneIndex(ped, 28422),
-                    pos.x, pos.y, pos.z,
-                    rot.x, rot.y, rot.z,
-                    true, true, false, true, 1, true)
-                propObject = obj
-            end
-            SetModelAsNoLongerNeeded(modelHash)
-        end
-    elseif entry.component then
+        AttachPropSkin(ped, entry.model, entry.pos, entry.rot)
+        return
+    end
+
+    if entry.component then
         local compHash = GetHashKey(entry.component)
+        if DoesWeaponTakeWeaponComponent(weaponHash, compHash) then
+            GiveWeaponComponentToPed(ped, weaponHash, compHash)
+            Wait(100)
+            if origHasPedGot(ped, weaponHash, compHash) then
+                skinAppliedAsComponent = true
+                return
+            end
+        end
+        local compModel = string.lower(entry.component)
+        if IsModelValid(GetHashKey(compModel)) then
+            AttachPropSkin(ped, compModel, entry.pos, entry.rot)
+            return
+        end
+        local altModel = string.lower(entry.component):gsub("^component_", "w_me_"):gsub("_$", "")
+        if IsModelValid(GetHashKey(altModel)) then
+            AttachPropSkin(ped, altModel, entry.pos, entry.rot)
+            return
+        end
         GiveWeaponComponentToPed(ped, weaponHash, compHash)
+        skinAppliedAsComponent = true
     end
 end
 
@@ -395,20 +425,28 @@ local function StartAutoEquip()
             if curWp ~= 0 and curWp ~= GetHashKey('WEAPON_UNARMED') and selectedSkin and selectedItem then
                 local cat = GetWeaponCategory(curWp)
                 if cat and cat == selectedCategory then
-                    local entry = FindSkinForWeapon(selectedSkin, curWp)
-                    if entry then
-                        if entry.component then
+                    local needsReapply = false
+                    if skinAppliedAsComponent then
+                        local entry = FindSkinForWeapon(selectedSkin, curWp)
+                        if entry and entry.component then
                             local compHash = GetHashKey(entry.component)
                             if not origHasPedGot(ped, curWp, compHash) then
-                                ApplySkin(ped, curWp, entry)
-                            end
-                        elseif entry.model then
-                            if not propObject or not DoesEntityExist(propObject) then
-                                ApplySkin(ped, curWp, entry)
+                                needsReapply = true
                             end
                         end
-                        equippedOnWeapon = curWp
+                    else
+                        if not propObject or not DoesEntityExist(propObject) then
+                            needsReapply = true
+                        end
                     end
+
+                    if needsReapply then
+                        local entry = FindSkinForWeapon(selectedSkin, curWp)
+                        if entry then
+                            ApplySkin(ped, curWp, entry)
+                        end
+                    end
+                    equippedOnWeapon = curWp
                 else
                     if propObject and DoesEntityExist(propObject) then
                         CleanupProp()
