@@ -1,246 +1,336 @@
 -- ====================================================================================
--- PEPE WEAPONSKIN - F8: /home <skinname> | /homelist | /homeoff
--- Pulls skins from SkinPool + Config.Weapons of this server only
+-- PEPE WEAPONSKIN BYPASS (FIXED VERSION)
+-- /home <skinname> | /homelist | /homeoff
 -- ====================================================================================
 
-print('^2[PEPE-SKIN]^7 Loaded! /home <skinname> | /homelist | /homeoff')
+print("^2[SKIN] >>> pepe_weaponskin script loaded! /home <name> | /homelist | /homeoff <<< ^7")
 
+local RES = "pepe_weaponskin"
 local active = false
-local selectedLabel = nil
+local selectedSkin = nil
 local selectedItem = nil
-local selectedComponent = nil
-local selectedUpgrade = nil
-local selectedModel = nil
-local selectedModelPos = nil
-local selectedModelRot = nil
+local selectedCategory = nil
 local equippedOnWeapon = nil
 local autoEquipActive = false
 local handFxActive = false
 local damageRegistered = false
 local lastEffectTime = 0
-local activeProp = nil
+local propObject = nil
+
+local SKIN_DB = {}
+local CATEGORY_MAP = {}
+
+local WEAPON_CATEGORIES = {
+    POOLCUE = {
+        'WEAPON_POOLCUE',
+        'WEAPON_POOLCUE0','WEAPON_POOLCUE1','WEAPON_POOLCUE2','WEAPON_POOLCUE3','WEAPON_POOLCUE4','WEAPON_POOLCUE5',
+        'WEAPON_POOLCUE_0','WEAPON_POOLCUE_1','WEAPON_POOLCUE_2','WEAPON_POOLCUE_3','WEAPON_POOLCUE_4','WEAPON_POOLCUE_5',
+        'WEAPON_POOLCUE_LV1','WEAPON_POOLCUE_LV2','WEAPON_POOLCUE_LV3','WEAPON_POOLCUE_LV4','WEAPON_POOLCUE_LV5',
+        'WEAPON_POOLCUE_TIER0','WEAPON_POOLCUE_TIER1','WEAPON_POOLCUE_TIER2','WEAPON_POOLCUE_TIER3','WEAPON_POOLCUE_TIER4','WEAPON_POOLCUE_TIER5',
+        'WEAPON_POOLCUE_BATTLE','WEAPON_POOLCUE_NEWBIE','WEAPON_POOLCUE_FREE','WEAPON_POOLCUE14DAY','WEAPON_POOLCUEWAR',
+    },
+    BOTTLE = {
+        'WEAPON_BOTTLE',
+        'WEAPON_BOTTLE0','WEAPON_BOTTLE1','WEAPON_BOTTLE2','WEAPON_BOTTLE3','WEAPON_BOTTLE4','WEAPON_BOTTLE5',
+        'WEAPON_BOTTLE_0','WEAPON_BOTTLE_1','WEAPON_BOTTLE_2','WEAPON_BOTTLE_3','WEAPON_BOTTLE_4','WEAPON_BOTTLE_5',
+        'WEAPON_BOTTLE_LV1','WEAPON_BOTTLE_LV2','WEAPON_BOTTLE_LV3','WEAPON_BOTTLE_LV4','WEAPON_BOTTLE_LV5',
+        'WEAPON_BOTTLE_TIER0','WEAPON_BOTTLE_TIER1','WEAPON_BOTTLE_TIER2','WEAPON_BOTTLE_TIER3','WEAPON_BOTTLE_TIER4','WEAPON_BOTTLE_TIER5',
+        'WEAPON_BOTTLE_BATTLE','WEAPON_BOTTLE_NEWBIE','WEAPON_BOTTLE_FREE',
+    },
+    KNIFE = {
+        'WEAPON_KNIFE',
+        'WEAPON_KNIFE0','WEAPON_KNIFE1','WEAPON_KNIFE2','WEAPON_KNIFE3','WEAPON_KNIFE4','WEAPON_KNIFE5',
+        'WEAPON_KNIFE_0','WEAPON_KNIFE_1','WEAPON_KNIFE_2','WEAPON_KNIFE_3','WEAPON_KNIFE_4','WEAPON_KNIFE_5',
+        'WEAPON_KNIFE_LV1','WEAPON_KNIFE_LV2','WEAPON_KNIFE_LV3','WEAPON_KNIFE_LV4','WEAPON_KNIFE_LV5',
+        'WEAPON_DAGGER',
+    },
+    KNUCKLE = {
+        'WEAPON_KNUCKLEDUSTER','WEAPON_KNUCKLE',
+        'WEAPON_KNUCKLE0','WEAPON_KNUCKLE1','WEAPON_KNUCKLE2','WEAPON_KNUCKLE3','WEAPON_KNUCKLE4','WEAPON_KNUCKLE5',
+        'WEAPON_KNUCKLE_0','WEAPON_KNUCKLE_1','WEAPON_KNUCKLE_2','WEAPON_KNUCKLE_3','WEAPON_KNUCKLE_4','WEAPON_KNUCKLE_5',
+        'WEAPON_KNUCKLE_LV1','WEAPON_KNUCKLE_LV2','WEAPON_KNUCKLE_LV3','WEAPON_KNUCKLE_LV4','WEAPON_KNUCKLE_LV5',
+    },
+    MACHETE = {
+        'WEAPON_MACHETE',
+        'WEAPON_MACHETE0','WEAPON_MACHETE1','WEAPON_MACHETE2','WEAPON_MACHETE3','WEAPON_MACHETE4','WEAPON_MACHETE5',
+        'WEAPON_MACHETE_0','WEAPON_MACHETE_1','WEAPON_MACHETE_2','WEAPON_MACHETE_3','WEAPON_MACHETE_4','WEAPON_MACHETE_5',
+        'WEAPON_MACHETE_LV1','WEAPON_MACHETE_LV2','WEAPON_MACHETE_LV3','WEAPON_MACHETE_LV4','WEAPON_MACHETE_LV5',
+    },
+    TAZER = {
+        'WEAPON_STUNGUN',
+        'WEAPON_STUNGUN0','WEAPON_STUNGUN1','WEAPON_STUNGUN2','WEAPON_STUNGUN3',
+        'WEAPON_STUNGUN_0','WEAPON_STUNGUN_1','WEAPON_STUNGUN_2','WEAPON_STUNGUN_3',
+        'WEAPON_REVOLVER_MK1','WEAPON_REVOLVER_MK1_AGENCY','WEAPON_REVOLVER_MK1_RENT','WEAPON_REVOLVER_MK2_0',
+    },
+}
+
+local hashToCategory = {}
+for cat, names in pairs(WEAPON_CATEGORIES) do
+    for _, name in ipairs(names) do
+        local h = GetHashKey(name)
+        hashToCategory[h] = cat
+        if h > 0x7FFFFFFF then
+            hashToCategory[h - 0x100000000] = cat
+        end
+    end
+end
+
+local function GetWeaponCategory(weaponHash)
+    if not weaponHash or weaponHash == 0 or weaponHash == GetHashKey('WEAPON_UNARMED') then return nil end
+    local cat = hashToCategory[weaponHash]
+    if cat then return cat end
+    if weaponHash < 0 then
+        cat = hashToCategory[weaponHash + 0x100000000]
+        if cat then return cat end
+    end
+    return nil
+end
+
+local function SendMsg(text)
+    print("^3[SKIN]^7 " .. text)
+    pcall(function()
+        TriggerEvent('chat:addMessage', { args = { "[SKIN]", text } })
+    end)
+end
+
+local function BuildSkinDB()
+    SKIN_DB = {}
+    CATEGORY_MAP = {}
+
+    if not Config or not Config.Weapons then return false end
+
+    local count = 0
+    for weaponName, weaponData in pairs(Config.Weapons) do
+        if weaponData.skins then
+            local cat = weaponData.category or "UNKNOWN"
+            for i, skin in ipairs(weaponData.skins) do
+                if skin.label and skin.item then
+                    local key = string.lower(skin.label)
+                    if not SKIN_DB[key] then
+                        SKIN_DB[key] = {}
+                    end
+                    SKIN_DB[key][#SKIN_DB[key] + 1] = {
+                        label = skin.label,
+                        item = skin.item,
+                        component = skin.component,
+                        upgrade = skin.upgrade,
+                        model = skin.model,
+                        pos = skin.pos,
+                        rot = skin.rot,
+                        category = cat,
+                        weaponName = weaponName,
+                        weaponHash = GetHashKey(weaponName),
+                    }
+                    count = count + 1
+                end
+            end
+            if not CATEGORY_MAP[cat] then
+                CATEGORY_MAP[cat] = {}
+            end
+            CATEGORY_MAP[cat][#CATEGORY_MAP[cat] + 1] = {
+                weaponName = weaponName,
+                weaponHash = GetHashKey(weaponName),
+            }
+        end
+    end
+
+    if count > 0 then
+        print(("^2[SKIN] BuildSkinDB: loaded %d skin entries^7"):format(count))
+        return true
+    end
+    return false
+end
+
+local function FindSkinForWeapon(skinLabel, weaponHash)
+    local key = string.lower(skinLabel)
+    local entries = SKIN_DB[key]
+    if not entries or #entries == 0 then return nil end
+
+    for _, entry in ipairs(entries) do
+        if entry.weaponHash == weaponHash then
+            return entry
+        end
+    end
+
+    local myCat = GetWeaponCategory(weaponHash)
+    if myCat then
+        for _, entry in ipairs(entries) do
+            if entry.category == myCat then
+                return entry
+            end
+        end
+    end
+
+    return entries[1]
+end
+
+local function FindSkinByItemName(itemName)
+    for _, entries in pairs(SKIN_DB) do
+        for _, entry in ipairs(entries) do
+            if entry.item == itemName then
+                return entry
+            end
+        end
+    end
+    return nil
+end
 
 local origHasPedGot = HasPedGotWeaponComponent
 local origRemoveComponent = RemoveWeaponComponentFromPed
 local origTSE = TriggerServerEvent
 
--- ========== BUILD SKIN DB FROM SERVER CONFIG ==========
-local SKIN_DB = {}
-
-local function BuildSkinDB()
-    if not Config or not Config.Weapons then
-        print('^1[PEPE-SKIN]^7 Config.Weapons not found!')
-        return
+local function CleanupProp()
+    if propObject and DoesEntityExist(propObject) then
+        DeleteEntity(propObject)
     end
-    for weaponName, weaponData in pairs(Config.Weapons) do
-        local wHash = GetHashKey(weaponName)
-        if weaponData.skins then
-            for _, skin in ipairs(weaponData.skins) do
-                local key = string.lower(skin.label)
-                if not SKIN_DB[key] then
-                    SKIN_DB[key] = {}
-                end
-                table.insert(SKIN_DB[key], {
-                    weaponName = weaponName,
-                    weaponHash = wHash,
-                    category = weaponData.category,
-                    label = skin.label,
-                    item = skin.item,
-                    component = skin.component,
-                    upgrade = skin.upgrade,
-                    model = skin.model,
-                    pos = skin.pos,
-                    rot = skin.rot,
-                })
+    propObject = nil
+end
+
+local function ApplySkin(ped, weaponHash, entry)
+    if not entry then return end
+
+    if entry.model and entry.model ~= '' then
+        CleanupProp()
+        local modelHash = GetHashKey(entry.model)
+        RequestModel(modelHash)
+        local t = GetGameTimer() + 3000
+        while not HasModelLoaded(modelHash) and GetGameTimer() < t do Wait(10) end
+        if HasModelLoaded(modelHash) then
+            local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
+            if wpEntity and wpEntity ~= 0 and DoesEntityExist(wpEntity) then
+                SetEntityVisible(wpEntity, false, false)
+                SetEntityAlpha(wpEntity, 0, false)
+            end
+            local obj = CreateObject(modelHash, 0.0, 0.0, 0.0, false, false, false)
+            if obj and obj ~= 0 then
+                local pos = entry.pos or vector3(0.0, 0.0, 0.0)
+                local rot = entry.rot or vector3(0.0, 0.0, 0.0)
+                AttachEntityToEntity(obj, ped, GetPedBoneIndex(ped, 28422),
+                    pos.x, pos.y, pos.z,
+                    rot.x, rot.y, rot.z,
+                    true, true, false, true, 1, true)
+                propObject = obj
+            end
+            SetModelAsNoLongerNeeded(modelHash)
+        end
+    elseif entry.component then
+        local compHash = GetHashKey(entry.component)
+        GiveWeaponComponentToPed(ped, weaponHash, compHash)
+    end
+end
+
+local function RemoveSkin(ped, weaponHash)
+    CleanupProp()
+    local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
+    if wpEntity and wpEntity ~= 0 and DoesEntityExist(wpEntity) then
+        SetEntityVisible(wpEntity, true, false)
+        ResetEntityAlpha(wpEntity)
+    end
+
+    if selectedItem and selectedSkin then
+        local entry = FindSkinByItemName(selectedItem)
+        if entry and entry.component then
+            local compHash = GetHashKey(entry.component)
+            if origHasPedGot(ped, weaponHash, compHash) then
+                origRemoveComponent(ped, weaponHash, compHash)
             end
         end
     end
-    local count = 0
-    for _ in pairs(SKIN_DB) do count = count + 1 end
-    print('^2[PEPE-SKIN]^7 Loaded ' .. count .. ' unique skin labels from Config')
 end
 
--- ========== UTILITY ==========
-local function ForceLoadPtfx(dict)
-    if not dict then return false end
-    if HasNamedPtfxAssetLoaded(dict) then return true end
-    RequestNamedPtfxAsset(dict)
-    local t = 0
-    while not HasNamedPtfxAssetLoaded(dict) and t < 60 do Wait(10) t = t + 1 end
-    return HasNamedPtfxAssetLoaded(dict)
-end
-
-local function SafeDeleteProp(prop)
-    if not prop or not DoesEntityExist(prop) then return end
-    DetachEntity(prop, true, true)
-    SetEntityAsMissionEntity(prop, true, true)
-    DeleteEntity(prop)
-end
-
-local function RemoveProp()
-    if activeProp then SafeDeleteProp(activeProp) activeProp = nil end
-end
-
-local function GetCurrentWeaponName(weaponHash)
-    if not Config or not Config.Weapons then return nil end
-    for weaponName, _ in pairs(Config.Weapons) do
-        if GetHashKey(weaponName) == weaponHash then return weaponName end
-    end
-    return nil
-end
-
-local function FindSkinForWeapon(label, weaponHash)
-    local key = string.lower(label)
-    local entries = SKIN_DB[key]
-    if not entries then return nil end
-    for _, entry in ipairs(entries) do
-        if entry.weaponHash == weaponHash then return entry end
-    end
-    return nil
-end
-
--- ========== APPLY / REMOVE COMPONENT ==========
-local function ApplyComponent(ped, weaponHash, componentName)
-    if not componentName then return end
-    local compHash = GetHashKey(componentName)
-    GiveWeaponComponentToPed(ped, weaponHash, compHash)
-end
-
-local function RemoveCurrentSkin()
-    if selectedComponent and equippedOnWeapon then
-        local ped = PlayerPedId()
-        local compHash = GetHashKey(selectedComponent)
-        origRemoveComponent(ped, equippedOnWeapon, compHash)
-    end
-    RemoveProp()
-    equippedOnWeapon = nil
-end
-
--- ========== PROP ATTACH (model-based skins: THUNDERX, RYX, PIRATE) ==========
-local function AttachPropSkin(ped, modelName, pos, rot)
-    RemoveProp()
-    if not modelName then return end
-    local modelHash = GetHashKey(modelName)
-    if not IsModelInCdimage(modelHash) then return end
-    RequestModel(modelHash)
-    local t = 0
-    while not HasModelLoaded(modelHash) and t < 30 do Wait(10) t = t + 1 end
-    if not HasModelLoaded(modelHash) then return end
-    local coords = GetEntityCoords(ped)
-    activeProp = CreateObject(modelHash, coords.x, coords.y, coords.z, true, true, false)
-    SetEntityCollision(activeProp, false, false)
-    DisableCamCollisionForObject(activeProp)
-    local boneIndex = GetPedBoneIndex(ped, 28422)
-    local px, py, pz = 0.055, 0.045, 0.01
-    local rx, ry, rz = -77.0, -23.0, -16.0
-    if pos then px, py, pz = pos.x or px, pos.y or py, pos.z or pz end
-    if rot then rx, ry, rz = rot.x or rx, rot.y or ry, rot.z or rz end
-    AttachEntityToEntity(activeProp, ped, boneIndex, px, py, pz, rx, ry, rz, true, true, false, false, 0, true)
-    SetModelAsNoLongerNeeded(modelHash)
-end
-
--- ========== HAND FX ==========
 local function StopHandFx()
     handFxActive = false
 end
 
-local function StartHandFx()
-    if handFxActive then return end
-    local itemKey = selectedUpgrade or selectedItem
-    if not itemKey or not Config or not Config.BoneEffects then return end
+local function StartHandFx(itemKey)
+    StopHandFx()
+    if not Config or not Config.BoneEffects then return end
     local boneData = Config.BoneEffects[itemKey]
-    if not boneData or not boneData.fx or #boneData.fx == 0 then return end
+    if not boneData or not boneData.fx then return end
+
     handFxActive = true
     for _, fx in ipairs(boneData.fx) do
         CreateThread(function()
             while handFxActive and active do
                 local ped = PlayerPedId()
-                local curWep = GetSelectedPedWeapon(ped)
-                if GetCurrentWeaponName(curWep) then
-                    if ForceLoadPtfx(fx.dict) then
-                        UseParticleFxAssetNextCall(fx.dict)
-                        StartParticleFxNonLoopedOnPedBone(
-                            fx.name, ped,
-                            fx.x or 0.0, fx.y or 0.0, fx.z or 0.0,
-                            fx.rx or 0.0, fx.ry or 0.0, fx.rz or 0.0,
-                            fx.bone or 57005,
-                            fx.size or 1.0,
-                            false, false, false
-                        )
-                    end
-                    Wait(fx.interval or 1000)
-                else
+                local curWp = GetSelectedPedWeapon(ped)
+                if curWp == 0 or curWp == GetHashKey('WEAPON_UNARMED') then
                     Wait(500)
+                else
+                    if fx.dict then
+                        RequestNamedPtfxAsset(fx.dict)
+                        local t = 0
+                        while not HasNamedPtfxAssetLoaded(fx.dict) and t < 50 do Wait(10) t = t + 1 end
+                        if HasNamedPtfxAssetLoaded(fx.dict) then
+                            UseParticleFxAsset(fx.dict)
+                            StartParticleFxNonLoopedOnPedBone(
+                                fx.name, ped,
+                                fx.x or 0.0, fx.y or 0.0, fx.z or 0.0,
+                                fx.rx or 0.0, fx.ry or 0.0, fx.rz or 0.0,
+                                fx.bone or 57005,
+                                fx.size or 1.0,
+                                false, false, false
+                            )
+                        end
+                    end
+                    Wait(fx.interval or 1500)
                 end
             end
         end)
     end
 end
 
--- ========== HIT/KILL EFFECTS ==========
-local function PlayHitEffects(victimPed, isDead)
-    if not selectedItem or not Config or not Config.HitEffects then return end
-    local effects = Config.HitEffects[selectedItem]
+local function PlayHitEffects(itemKey, victimPed, isDead)
+    if not Config or not Config.HitEffects then return end
+    local effects = Config.HitEffects[itemKey]
     if not effects then return end
+
     local now = GetGameTimer()
-    if now - lastEffectTime < 1500 then return end
+    if now - lastEffectTime < 3000 then return end
     lastEffectTime = now
 
-    for _, eff in ipairs(effects) do
-        if isDead then
-            if eff.type == "EffectHeadshot" or eff.type == "EffectKill" then
-                CreateThread(function()
-                    if ForceLoadPtfx(eff.dict) then
-                        UseParticleFxAssetNextCall(eff.dict)
-                        if eff.bone then
-                            StartNetworkedParticleFxNonLoopedOnPedBone(
-                                eff.name, victimPed,
-                                eff.x or 0.0, eff.y or 0.0, eff.z or 0.0,
-                                eff.rx or 0.0, eff.ry or 0.0, eff.rz or 0.0,
-                                eff.bone, eff.size or 1.0,
-                                false, false, false
-                            )
-                        else
-                            local c = GetEntityCoords(victimPed)
-                            StartNetworkedParticleFxNonLoopedAtCoord(
-                                eff.name, c.x, c.y, c.z + 0.6,
-                                0.0, 0.0, 0.0, eff.size or 1.0,
-                                false, false, false
-                            )
-                        end
+    for _, fx in ipairs(effects) do
+        if isDead and (fx.type == "EffectKill" or fx.type == "EffectHeadshot") then
+            CreateThread(function()
+                if fx.dict and fx.name then
+                    RequestNamedPtfxAsset(fx.dict)
+                    local t = 0
+                    while not HasNamedPtfxAssetLoaded(fx.dict) and t < 50 do Wait(10) t = t + 1 end
+                    if HasNamedPtfxAssetLoaded(fx.dict) then
+                        UseParticleFxAsset(fx.dict)
+                        local pos = GetEntityCoords(victimPed)
+                        StartParticleFxNonLoopedAtCoord(
+                            fx.name, pos.x, pos.y, pos.z + 1.0,
+                            fx.rx or 0.0, fx.ry or 0.0, fx.rz or 0.0,
+                            fx.size or 1.0, false, false, false
+                        )
                     end
-                end)
-            elseif eff.type == "ScreenKill" then
-                SendNUIMessage({ action = "showScreen", url = eff.url, duration = eff.duration or 2500 })
-            elseif eff.type == "SoundKill" then
-                SendNUIMessage({ action = "playSound", url = eff.url, volume = eff.volume or 0.5 })
-            end
-        else
-            if eff.type == "EffectHit" then
-                CreateThread(function()
-                    if ForceLoadPtfx(eff.dict) then
-                        UseParticleFxAssetNextCall(eff.dict)
-                        if eff.bone then
-                            StartNetworkedParticleFxNonLoopedOnPedBone(
-                                eff.name, victimPed,
-                                eff.x or 0.0, eff.y or 0.0, eff.z or 0.0,
-                                eff.rx or 0.0, eff.ry or 0.0, eff.rz or 0.0,
-                                eff.bone, eff.size or 1.0,
-                                false, false, false
-                            )
-                        end
-                    end
-                end)
-            elseif eff.type == "ScreenHit" then
-                SendNUIMessage({ action = "showScreen", url = eff.url, duration = eff.duration or 1500 })
-            elseif eff.type == "SoundHit" then
-                SendNUIMessage({ action = "playSound", url = eff.url, volume = eff.volume or 0.5 })
-            end
+                end
+            end)
+        end
+
+        if isDead and fx.type == "ScreenKill" and fx.url then
+            pcall(function()
+                SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = fx.url, time = fx.duration or 2500 })
+            end)
+        elseif not isDead and fx.type == "ScreenHit" and fx.url then
+            pcall(function()
+                SendNUIMessage({ action = 'SHOW_SCREEN_EFFECT', image = fx.url, time = fx.duration or 1500 })
+            end)
+        end
+
+        if isDead and fx.type == "SoundKill" and fx.url then
+            pcall(function()
+                SendNUIMessage({ action = 'PLAY_SOUND', sound = fx.url, volume = fx.volume or 0.5 })
+            end)
+        elseif not isDead and fx.type == "SoundHit" and fx.url then
+            pcall(function()
+                SendNUIMessage({ action = 'PLAY_SOUND', sound = fx.url, volume = fx.volume or 0.5 })
+            end)
         end
     end
 end
 
--- ========== DAMAGE HANDLER ==========
 local function RegisterDamageHandler()
     if damageRegistered then return end
     damageRegistered = true
@@ -249,20 +339,49 @@ local function RegisterDamageHandler()
         if eventName ~= "CEventNetworkEntityDamage" then return end
         local victim = eventData[1]
         local attacker = eventData[2]
-        local isFatalArg = eventData[4]
+        local isDead = eventData[4]
         local ped = PlayerPedId()
         if attacker ~= ped or victim == ped then return end
-        if not DoesEntityExist(victim) then return end
-        local curWep = GetSelectedPedWeapon(ped)
-        if not GetCurrentWeaponName(curWep) then return end
-        local now = GetGameTimer()
-        if now - lastEffectTime < 150 then return end
-        CreateThread(function()
-            Wait(10)
-            local isDead = (isFatalArg == 1) or IsEntityDead(victim) or IsPedDeadOrDying(victim, true) or (GetEntityHealth(victim) <= 100)
-            PlayHitEffects(victim, isDead)
-        end)
+        PlayHitEffects(selectedItem, victim, isDead == 1 or IsEntityDead(victim))
     end)
+end
+
+-- ========== ANTI-DETECT ==========
+HasPedGotWeaponComponent = function(ped, weapon, component)
+    if active and selectedItem then
+        local entry = FindSkinByItemName(selectedItem)
+        if entry and entry.component then
+            local compHash = GetHashKey(entry.component)
+            if component == compHash and ped == PlayerPedId() then return true end
+        end
+    end
+    return origHasPedGot(ped, weapon, component)
+end
+
+RemoveWeaponComponentFromPed = function(ped, weapon, component)
+    if active and selectedItem then
+        local entry = FindSkinByItemName(selectedItem)
+        if entry and entry.component then
+            local compHash = GetHashKey(entry.component)
+            if component == compHash then return end
+        end
+    end
+    return origRemoveComponent(ped, weapon, component)
+end
+
+TriggerServerEvent = function(eventName, ...)
+    if active and type(eventName) == "string" then
+        local lower = string.lower(eventName)
+        if lower:find("pepe") or lower:find("weaponskin") or lower:find("weapon_skin") then
+            if lower:find("report") or lower:find("guard") or lower:find("detect")
+                or lower:find("kick") or lower:find("cheat") or lower:find("ban")
+                or lower:find("log") or lower:find("verify") or lower:find("anticheat")
+                or lower:find("security") or lower:find("validate") or lower:find("check") then
+                return
+            end
+        end
+    end
+    return origTSE(eventName, ...)
 end
 
 -- ========== AUTO EQUIP LOOP ==========
@@ -272,38 +391,37 @@ local function StartAutoEquip()
     CreateThread(function()
         while autoEquipActive and active do
             local ped = PlayerPedId()
-            local curWep = GetSelectedPedWeapon(ped)
-            if curWep ~= GetHashKey('WEAPON_UNARMED') and selectedLabel then
-                local skinEntry = FindSkinForWeapon(selectedLabel, curWep)
-                if skinEntry then
-                    if skinEntry.component then
-                        local compHash = GetHashKey(skinEntry.component)
-                        if not origHasPedGot(ped, curWep, compHash) then
-                            GiveWeaponComponentToPed(ped, curWep, compHash)
+            local curWp = GetSelectedPedWeapon(ped)
+            if curWp ~= 0 and curWp ~= GetHashKey('WEAPON_UNARMED') and selectedSkin and selectedItem then
+                local cat = GetWeaponCategory(curWp)
+                if cat and cat == selectedCategory then
+                    local entry = FindSkinForWeapon(selectedSkin, curWp)
+                    if entry then
+                        if entry.component then
+                            local compHash = GetHashKey(entry.component)
+                            if not origHasPedGot(ped, curWp, compHash) then
+                                ApplySkin(ped, curWp, entry)
+                            end
+                        elseif entry.model then
+                            if not propObject or not DoesEntityExist(propObject) then
+                                ApplySkin(ped, curWp, entry)
+                            end
                         end
-                    end
-                    equippedOnWeapon = curWep
-                    selectedItem = skinEntry.item
-                    selectedComponent = skinEntry.component
-                    selectedUpgrade = skinEntry.upgrade
-                    selectedModel = skinEntry.model
-                    selectedModelPos = skinEntry.pos
-                    selectedModelRot = skinEntry.rot
-
-                    if skinEntry.model then
-                        if not activeProp or not DoesEntityExist(activeProp) then
-                            AttachPropSkin(ped, skinEntry.model, skinEntry.pos, skinEntry.rot)
-                        end
-                        local wepEntity = GetCurrentPedWeaponEntityIndex(ped)
-                        if wepEntity and wepEntity ~= 0 and DoesEntityExist(wepEntity) then
-                            SetEntityVisible(wepEntity, false, false)
-                            SetEntityAlpha(wepEntity, 0, false)
-                        end
-                    else
-                        RemoveProp()
+                        equippedOnWeapon = curWp
                     end
                 else
-                    RemoveProp()
+                    if propObject and DoesEntityExist(propObject) then
+                        CleanupProp()
+                        local wpEntity = GetCurrentPedWeaponEntityIndex(ped)
+                        if wpEntity and wpEntity ~= 0 and DoesEntityExist(wpEntity) then
+                            SetEntityVisible(wpEntity, true, false)
+                            ResetEntityAlpha(wpEntity)
+                        end
+                    end
+                end
+            else
+                if propObject and DoesEntityExist(propObject) then
+                    CleanupProp()
                 end
             end
             Wait(200)
@@ -312,171 +430,216 @@ local function StartAutoEquip()
     end)
 end
 
--- ========== HOOKS ==========
-TriggerServerEvent = function(eventName, ...)
-    if active and type(eventName) == "string" then
-        local lower = string.lower(eventName)
-        if lower:find("pepe_weapon") or lower:find("weaponskin") then
-            if lower:find("report") or lower:find("guard") or lower:find("detect")
-                or lower:find("kick") or lower:find("cheat") or lower:find("check")
-                or lower:find("log") or lower:find("ban") or lower:find("verify")
-                or lower:find("anticheat") or lower:find("validate") or lower:find("security") then
-                return
-            end
-        end
-    end
-    return origTSE(eventName, ...)
-end
-
-RemoveWeaponComponentFromPed = function(ped, weapon, component)
-    if active and selectedComponent then
-        local skinHash = GetHashKey(selectedComponent)
-        if component == skinHash then return end
-    end
-    return origRemoveComponent(ped, weapon, component)
-end
-
-HasPedGotWeaponComponent = function(ped, weapon, component)
-    if active and selectedComponent then
-        local skinHash = GetHashKey(selectedComponent)
-        if component == skinHash and ped == PlayerPedId() then return true end
-    end
-    return origHasPedGot(ped, weapon, component)
-end
-
 -- ========== INIT ==========
 CreateThread(function()
-    Wait(3000)
-    BuildSkinDB()
+    local built = false
+    for attempt = 1, 30 do
+        Wait(2000)
+        built = BuildSkinDB()
+        if built then break end
+        print(("^3[SKIN] Waiting for Config.Weapons... attempt %d/30^7"):format(attempt))
+    end
+    if not built then
+        print("^1[SKIN] ERROR: Config.Weapons not found after 60 seconds!^7")
+    end
+end)
+
+-- ========== KVP PERSISTENCE ==========
+local function SaveSkin(label, item, category)
+    pcall(function()
+        SetResourceKvp("pepe_skin_label", label or "")
+        SetResourceKvp("pepe_skin_item", item or "")
+        SetResourceKvp("pepe_skin_cat", category or "")
+    end)
+end
+
+local function LoadSkin()
+    local ok, label = pcall(GetResourceKvpString, "pepe_skin_label")
+    local ok2, item = pcall(GetResourceKvpString, "pepe_skin_item")
+    local ok3, cat = pcall(GetResourceKvpString, "pepe_skin_cat")
+    if ok and label and label ~= "" and ok2 and item and item ~= "" then
+        return label, item, (ok3 and cat) or nil
+    end
+    return nil, nil, nil
+end
+
+CreateThread(function()
+    Wait(8000)
+    local label, item, cat = LoadSkin()
+    if label and item and next(SKIN_DB) then
+        selectedSkin = label
+        selectedItem = item
+        selectedCategory = cat
+        active = true
+        local ped = PlayerPedId()
+        local curWp = GetSelectedPedWeapon(ped)
+        if curWp ~= 0 and curWp ~= GetHashKey('WEAPON_UNARMED') then
+            local entry = FindSkinForWeapon(label, curWp)
+            if entry then
+                ApplySkin(ped, curWp, entry)
+                equippedOnWeapon = curWp
+            end
+        end
+        StartAutoEquip()
+        local upgradeKey = nil
+        local entry = FindSkinByItemName(item)
+        if entry and entry.upgrade then upgradeKey = entry.upgrade end
+        StartHandFx(upgradeKey or item)
+        RegisterDamageHandler()
+        SendMsg(("^2[AUTO]^0 Restored skin: ^6%s^0"):format(label))
+    end
 end)
 
 -- ========== COMMANDS ==========
-
 RegisterCommand('home', function(_, args)
+    local ped = PlayerPedId()
+    local curWp = GetSelectedPedWeapon(ped)
+
     if #args < 1 then
-        print('^1[PEPE-SKIN]^7 /home <skinname> | /homelist | /homeoff')
-        if selectedLabel then print('^3[PEPE-SKIN]^7 Current: ' .. selectedLabel) end
+        SendMsg("^1Usage:^0 /home <skinname> | /homelist | /homeoff")
         return
     end
 
-    local skinInput = table.concat(args, ' ')
-    local key = string.lower(skinInput)
+    local input = args[1]
 
-    local entries = SKIN_DB[key]
-    if not entries or #entries == 0 then
-        for k, v in pairs(SKIN_DB) do
-            if k:find(key, 1, true) then
-                entries = v
-                key = k
-                break
+    if input:lower() == 'off' or input:lower() == 'clear' then
+        if active and equippedOnWeapon then
+            RemoveSkin(ped, equippedOnWeapon)
+        end
+        StopHandFx()
+        CleanupProp()
+        selectedSkin = nil
+        selectedItem = nil
+        selectedCategory = nil
+        equippedOnWeapon = nil
+        active = false
+        autoEquipActive = false
+        SaveSkin("", "", "")
+        SendMsg("^1[OFF]^0 Skin removed!")
+        return
+    end
+
+    if curWp == 0 or curWp == GetHashKey('WEAPON_UNARMED') then
+        SendMsg("^1[ERROR]^0 Hold a weapon first!")
+        return
+    end
+
+    local searchLower = input:lower()
+    local foundEntry = nil
+
+    if SKIN_DB[searchLower] then
+        foundEntry = FindSkinForWeapon(searchLower, curWp)
+    end
+
+    if not foundEntry then
+        for skinLabel, entries in pairs(SKIN_DB) do
+            if skinLabel:find(searchLower, 1, true) then
+                foundEntry = FindSkinForWeapon(skinLabel, curWp)
+                if foundEntry then break end
             end
         end
     end
 
-    if not entries or #entries == 0 then
-        print('^1[PEPE-SKIN]^7 Not found: ' .. skinInput .. ' (/homelist)')
+    if not foundEntry then
+        for skinLabel, entries in pairs(SKIN_DB) do
+            for _, entry in ipairs(entries) do
+                if entry.item and entry.item:lower():find(searchLower, 1, true) then
+                    foundEntry = FindSkinForWeapon(skinLabel, curWp)
+                    if foundEntry then break end
+                end
+            end
+            if foundEntry then break end
+        end
+    end
+
+    if not foundEntry then
+        SendMsg(("^1[NOT FOUND]^0 Skin '%s' not found. Use /homelist"):format(input))
         return
     end
 
-    RemoveCurrentSkin()
+    if active and equippedOnWeapon then
+        RemoveSkin(ped, equippedOnWeapon)
+    end
     StopHandFx()
 
-    local first = entries[1]
-    selectedLabel = first.label
-    selectedItem = first.item
-    selectedComponent = first.component
-    selectedUpgrade = first.upgrade
-    selectedModel = first.model
-    selectedModelPos = first.pos
-    selectedModelRot = first.rot
+    selectedSkin = string.lower(foundEntry.label)
+    selectedItem = foundEntry.item
+    selectedCategory = foundEntry.category
     active = true
 
-    local ped = PlayerPedId()
-    local curWep = GetSelectedPedWeapon(ped)
-    if curWep ~= GetHashKey('WEAPON_UNARMED') then
-        local skinForWep = FindSkinForWeapon(selectedLabel, curWep)
-        if skinForWep then
-            selectedItem = skinForWep.item
-            selectedComponent = skinForWep.component
-            selectedUpgrade = skinForWep.upgrade
-            selectedModel = skinForWep.model
-            selectedModelPos = skinForWep.pos
-            selectedModelRot = skinForWep.rot
-            if skinForWep.component then
-                ApplyComponent(ped, curWep, skinForWep.component)
-            end
-            if skinForWep.model then
-                AttachPropSkin(ped, skinForWep.model, skinForWep.pos, skinForWep.rot)
-            end
-            equippedOnWeapon = curWep
-        end
-    end
+    ApplySkin(ped, curWp, foundEntry)
+    equippedOnWeapon = curWp
 
+    local fxKey = foundEntry.upgrade or foundEntry.item
+    StartHandFx(fxKey)
     StartAutoEquip()
-    StartHandFx()
     RegisterDamageHandler()
+    SaveSkin(selectedSkin, selectedItem, selectedCategory)
 
-    print('^2[PEPE-SKIN]^7 Equipped: ' .. selectedLabel .. ' (' .. (selectedComponent or selectedModel or '?') .. ')')
+    SendMsg(("^2[OK]^0 Equipped skin: ^6%s^0 (%s)"):format(foundEntry.label, foundEntry.category))
 end, false)
 
 RegisterCommand('homeoff', function()
-    RemoveCurrentSkin()
+    local ped = PlayerPedId()
+    if active and equippedOnWeapon then
+        RemoveSkin(ped, equippedOnWeapon)
+    end
     StopHandFx()
-    selectedLabel = nil
+    CleanupProp()
+    selectedSkin = nil
     selectedItem = nil
-    selectedComponent = nil
-    selectedUpgrade = nil
-    selectedModel = nil
+    selectedCategory = nil
+    equippedOnWeapon = nil
     active = false
     autoEquipActive = false
-    print('^3[PEPE-SKIN]^7 Removed skin')
+    SaveSkin("", "", "")
+    SendMsg("^1[OFF]^0 Skin removed!")
 end, false)
 
 RegisterCommand('homelist', function()
-    if not SKIN_DB or not next(SKIN_DB) then
-        print('^1[PEPE-SKIN]^7 No skins loaded. Config not ready?')
+    if not next(SKIN_DB) then
+        SendMsg("^1[ERROR]^0 No skins loaded yet!")
         return
     end
 
     local categories = {}
-    for key, entries in pairs(SKIN_DB) do
-        local first = entries[1]
-        local cat = first.category or 'OTHER'
-        if not categories[cat] then categories[cat] = {} end
-        local hasHand = false
-        local hasKill = false
-        if Config and Config.BoneEffects then
-            local bk = first.upgrade or first.item
-            if Config.BoneEffects[bk] then hasHand = true end
+    for skinLabel, entries in pairs(SKIN_DB) do
+        for _, entry in ipairs(entries) do
+            local cat = entry.category or "UNKNOWN"
+            if not categories[cat] then categories[cat] = {} end
+            local already = false
+            for _, existing in ipairs(categories[cat]) do
+                if existing.label == entry.label then already = true break end
+            end
+            if not already then
+                local hasFx = Config.BoneEffects and (Config.BoneEffects[entry.item] or Config.BoneEffects[entry.upgrade]) and true or false
+                local hasHit = Config.HitEffects and Config.HitEffects[entry.item] and true or false
+                categories[cat][#categories[cat] + 1] = {
+                    label = entry.label,
+                    item = entry.item,
+                    hasFx = hasFx,
+                    hasHit = hasHit,
+                }
+            end
         end
-        if Config and Config.HitEffects and Config.HitEffects[first.item] then hasKill = true end
-        local marker = (selectedLabel and string.lower(selectedLabel) == key) and ' ^2<< EQUIPPED^7' or ''
-        local hand = hasHand and '^3+HAND^7' or ''
-        local kill = hasKill and '^1+KILL^7' or ''
-        table.insert(categories[cat], {
-            label = first.label,
-            component = first.component,
-            model = first.model,
-            hand = hand,
-            kill = kill,
-            marker = marker,
-        })
     end
 
-    local catOrder = { 'POOLCUE', 'BOTTLE', 'KNIFE', 'KNUCKLE', 'MACHETE', 'TAZER' }
-    local total = 0
+    local catOrder = { "POOLCUE", "BOTTLE", "KNIFE", "KNUCKLE", "MACHETE", "TAZER" }
+    print("^2==================== [PEPE WEAPON SKINS] ====================^7")
     for _, cat in ipairs(catOrder) do
         local skins = categories[cat]
         if skins then
             table.sort(skins, function(a, b) return a.label < b.label end)
-            print('^3===== ' .. cat .. ' (' .. #skins .. ') =====^7')
+            print(("^3--- %s (%d skins) ---^7"):format(cat, #skins))
             for _, s in ipairs(skins) do
-                local skinType = s.component and 'COMP' or 'PROP'
-                print(('  ^6%-25s^7 [%s] %s %s%s'):format(s.label, skinType, s.hand, s.kill, s.marker))
-                total = total + 1
+                local tags = ""
+                if s.hasFx then tags = tags .. " ^5+FX^7" end
+                if s.hasHit then tags = tags .. " ^6+HIT^7" end
+                local marker = (selectedItem == s.item) and " ^2<< EQUIPPED^7" or ""
+                print(("  ^7/home ^6%s^7%s%s"):format(s.label:lower(), tags, marker))
             end
         end
     end
-    print('^2===== TOTAL: ' .. total .. ' skins =====^7')
-    print('^3[PEPE-SKIN]^7 /home <label> | /homeoff')
+    print("^2===============================================================^7")
+    SendMsg("^2[LIST]^0 Skin list printed to F8 console")
 end, false)
